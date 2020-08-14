@@ -62,8 +62,11 @@ import {
 appData.selectionManager = new SelectionManager(appData, {
   enableXfoHandles: true,
 })
-appData.toolManager = new ToolManager(appData)
+appData.selectionManager.on('selectionChanged', (event) => {
+  event.selection.forEach((item) => console.log(item.getPath()))
+})
 appData.undoRedoManager = new UndoRedoManager()
+appData.toolManager = new ToolManager(appData)
 
 renderer.setUndoRedoManager(appData.undoRedoManager)
 ////////////////////////////////////////////////////
