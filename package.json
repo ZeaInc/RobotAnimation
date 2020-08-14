@@ -8,6 +8,7 @@
     "@zeainc/zea-engine": "^1.1.0",
     "@zeainc/zea-kinematics": "^1.0.0",
     "@zeainc/zea-pointclouds": "^0.1.0",
-    "@zeainc/zea-ux": "^1.3.0"
+    "@zeainc/zea-ux": "^1.3.0",
+    "@zeainc/zea-web-components": "^0.0.60"
   }
 }

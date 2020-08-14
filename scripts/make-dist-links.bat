@@ -16,4 +16,7 @@ mklink /J "../libs/zea-ux/dist" "../node_modules/@zeainc/zea-ux/dist"
 mkdir "../libs/zea-pointclouds"
 mklink /J "../libs/zea-pointclouds/dist" "../node_modules/@zeainc/zea-pointclouds/dist"
 
+mkdir "../libs/zea-web-components"
+mklink /J "../libs/zea-web-components/dist" "../node_modules/@zeainc/zea-web-components/dist"
+
 pause

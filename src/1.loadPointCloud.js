@@ -5,7 +5,7 @@ const loadPointCloud = (appData) => {
   const pointcloudPass = new GLPointCloudPass()
   appData.renderer.addPass(pointcloudPass, PassType.OPAQUE)
 
-  const pointcloud = new PointCloudAsset()
+  const pointcloud = new PointCloudAsset('NavVisHQ')
   const pointCloudUrl = 'https://storage.googleapis.com/zea-projects-assets/5764748591235072/NavVisHQ/cloud.js'
   pointcloud.getParameter('Point Size').setValue(0.5)
   pointcloud.getParameter('Point Size Attenuation').setValue(0.5)

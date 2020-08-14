@@ -2,9 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <link rel="shortcut icon" href="img/favicon-32x32.png" type="image/x-icon">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ZEA CAD - Setup CCDIK</title>
-    <style type="text/css">
+    <title>Zea - Robot Planning</title>
+    <link rel="stylesheet" type="text/css" href="./src/App.css">
+    <script type="module" src="./libs/zea-web-components/dist/zeainc-zea-web-components/zeainc-zea-web-components.esm.js"></script>
+    <link rel="stylesheet" href="./libs/zea-web-components/dist/zeainc-zea-web-components/zeainc-zea-web-components.css"></link>
+    <!-- <style type="text/css">
       html,
       body {
         overflow: hidden;
@@ -13,10 +17,82 @@
         margin: 0;
         padding: 0;
       }
-    </style>
+    </style> -->
   </head>
   <body>
-    <div id="viewport"></div>
+    <div class="App">
+    <zea-layout
+      orientation="vertical"
+      cell-a-size="45"
+      resize-cell-a="false"
+      cell-b-size="100%"
+      cell-c-size="5px"
+      resize-cell-c="false"
+    >
+      <div slot="a" class="App-header">
+        <img class="App-logo" src="img/logo-zea.svg" height="30px"/>
+        <div class="UserChipSetHolder">
+          <zea-user-chip-set id="zea-user-chip-set"></zea-user-chip-set>
+        </div>
+        <div class="MenuHolder">
+          <zea-menu type="dropdown" show-anchor="true">
+            <zea-menu-item>
+              Rendering Style
+              <zea-menu-subitems>
+                <zea-menu-item class="MenuItem" id="RealisticRendering">
+                  <zea-icon name="eye"></zea-icon>Realistic
+                </zea-menu-item>
+                <zea-menu-item class="MenuItem" id="IllustrationRendering">
+                  <zea-icon name="eye"></zea-icon>Illustration
+                </zea-menu-item>
+              </zea-menu-subitems>
+            </zea-menu-item>
+            <zea-menu-item>
+              Cutting Plane
+              <zea-menu-subitems>
+                <zea-menu-item class="MenuItem">
+                  <zea-icon></zea-icon> On
+                </zea-menu-item>
+              </zea-menu-subitems>
+            </zea-menu-item>
+            <zea-menu-item>
+              Level of detail
+              <zea-menu-subitems>
+                <zea-menu-item class="MenuItem">
+                  <zea-icon></zea-icon>Level 0 : Mobile
+                </zea-menu-item>
+                <zea-menu-item class="MenuItem">
+                  <zea-icon></zea-icon>Level 1 : Ultrabook
+                </zea-menu-item>
+                <zea-menu-item class="MenuItem">
+                  <zea-icon></zea-icon>Level 2 : Laptop
+                </zea-menu-item>
+                <zea-menu-item class="MenuItem">
+                  <zea-icon></zea-icon>Level 3 : Workstation
+                </zea-menu-item>
+              </zea-menu-subitems>
+            </zea-menu-item>
+            <zea-menu-item>
+              VR
+              <zea-menu-subitems>
+                <zea-menu-item class="MenuItem">
+                  <zea-icon></zea-icon>Launch VR
+                </zea-menu-item>
+              </zea-menu-subitems>
+            </zea-menu-item>
+          </zea-menu>
+        </div>
+        <zea-user-chip id="zea-user-chip"></zea-user-chip> 
+      </div>
+      <zea-layout slot="b" cell-a-size="200" cell-b-size="100%" cell-c-size="5px" resize-cell-c="false">
+        <zea-scroll-pane slot="a">
+          <zea-tree-view id="zea-tree-view"></zea-tree-view>
+        </zea-scroll-pane>
+        <div slot="b" id="viewport"></div>
+        <zea-scroll-pane slot="c"></zea-scroll-pane>
+      </zea-layout>
+    </zea-layout>
+  </div>
   </body>
   <script type="module" src="./src/index.js"></script>
 </html>

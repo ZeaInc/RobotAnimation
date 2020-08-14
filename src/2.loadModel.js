@@ -28,9 +28,13 @@ const loadModel = (appData) => {
   ///////////////////////////////////////
   // Setup the joints
 
+  const jointMaterial = new Material('Joint0', 'SimpleSurfaceShader')
+  jointMaterial.getParameter('BaseColor').setValue(new Color(1, 0, 0))
+
   function addJoint(name, axis) {
     // const joint = asset.getChildByName(name);
     const joint = new Group(name)
+    joint.getParameter('Material').setValue(jointMaterial)
     treeItem.addChild(joint)
     joint.addItem(asset.getChildByName(name))
     ikSolver.addJoint(joint.getParameter('GlobalXfo'), axis)
@@ -57,6 +61,8 @@ const loadModel = (appData) => {
   }
 
   asset.on('loaded', () => {
+    const materialLibrary = asset.getMaterialLibrary()
+
     // const joint = new Group(name);
     // ikSolver.getInput("Target").setParam(targGeomItem.getParameter("GlobalXfo"));
 

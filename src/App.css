@@ -28,7 +28,7 @@ body,
   --color-foreground-3: #7f7f7f;
   --color-grey-1: #2d2d2d;
   --color-grey-2: #323232;
-  --color-grey-3: #4e4e4e;
+  --color-grey-3: #1f1f1f;
   --color-button-text-1: #333333;
   --color-button-text-2: #ffffff;
   --color-disabled-1: #252525;
@@ -38,18 +38,15 @@ body,
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans',
+    'Droid Sans', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
-
 
 .App {
   text-align: center;
@@ -60,12 +57,10 @@ code {
 }
 .wrap {
   overflow: hidden;
-
 }
 .App-logo {
   height: 30px;
   pointer-events: none;
-  margin-right: 20px;
 }
 
 /* @media (prefers-reduced-motion: no-preference) {
@@ -78,18 +73,23 @@ code {
   text-align: left;
   margin: 5px;
   display: flex;
-} 
-
-.UserChipSetHolder {
-  flex-grow: 1;
 }
 
+.UserChipSetHolder {
+  min-width: 100px;
+}
+
+.MenuHolder {
+  flex-grow: 1;
+  position: relative;
+  z-index: 1000;
+}
 
 .App-link {
   color: #61dafb;
 }
 
-#renderer {
+#viewport {
   width: 100%;
   height: 100%;
 }

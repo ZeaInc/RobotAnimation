@@ -1,4 +1,4 @@
-import { Vec3, Color, Scene, GLRenderer } from '../libs/zea-engine/dist/index.esm.js'
+import { Vec3, Color, EnvMap, Scene, GLRenderer } from '../libs/zea-engine/dist/index.esm.js'
 
 const domElement = document.getElementById('viewport')
 
@@ -6,7 +6,10 @@ const scene = new Scene()
 scene.setupGrid(10.0, 10)
 
 const renderer = new GLRenderer(domElement, {
-  webglOptions: {},
+  webglOptions: {
+    antialias: true,
+    canvasPosition: 'relative',
+  },
 })
 renderer.setScene(scene)
 
@@ -19,6 +22,11 @@ renderer
   .getViewport()
   .getCamera()
   .setPositionAndTarget(new Vec3({ x: 5.0, y: 5.0, z: 2.0 }), new Vec3({ x: 0.0, y: 0.0, z: 1 }))
+
+const envMap = new EnvMap('envMap')
+envMap.getParameter('FilePath').setUrl('./data/HDR_029_Sky_Cloudy_Ref.vlenv')
+
+scene.setEnvMap(envMap)
 
 ////////////////////////////////////
 // Load the Model
@@ -79,10 +87,6 @@ const subtreeColor = selectionColor.lerp(new Color(1, 1, 1, 0), 0.5)
 appData.selectionManager.selectionGroup.getParameter('HighlightColor').setValue(selectionColor)
 appData.selectionManager.selectionGroup.getParameter('SubtreeHighlightColor').setValue(subtreeColor)
 
-// const sceneTreeView = document.getElementById("zea-tree-view");
-// sceneTreeView.appData = appData;
-// sceneTreeView.rootItem = scene.getRoot();
-
 let selectItemsActivatedTime
 let selectItemsActivated = false
 let currKey
@@ -142,6 +146,13 @@ document.addEventListener('keyup', (event) => {
   }
   if (event.key.toLowerCase() == currKey) currKey = undefined
 })
+
+////////////////////////////////////
+// Setup UI Web Components
+
+const sceneTreeView = document.getElementById('zea-tree-view')
+sceneTreeView.appData = appData
+sceneTreeView.rootItem = scene.getRoot()
 
 ////////////////////////////////////
 // Setup Collaboration
