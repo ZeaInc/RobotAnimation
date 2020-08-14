@@ -937,11 +937,11 @@ class TriangleIKSolver extends zeaEngine.Operator {
     const targetXfo = this.getInput('Target').getValue();
     const joint0Xfo = this.getOutput('Joint0').getValue();
     const joint1Xfo = this.getOutput('Joint1').getValue();
-    this.Joint1Offset = joint0Xfo.inverse().multiply(joint1Xfo).tr;
-    this.Joint1TargetOffset = joint1Xfo.inverse().multiply(targetXfo).tr;
-    this.Joint1TargetOffset.normalizeInPlace();
-    this.Joint0Length = joint1Xfo.tr.distanceTo(joint0Xfo.tr);
-    this.Joint1Length = targetXfo.tr.distanceTo(joint1Xfo.tr);
+    this.joint1Offset = joint0Xfo.inverse().multiply(joint1Xfo).tr;
+    this.joint1TargetOffset = joint1Xfo.inverse().multiply(targetXfo).tr;
+    this.joint1TargetOffset.normalizeInPlace();
+    this.joint0Length = joint1Xfo.tr.distanceTo(joint0Xfo.tr);
+    this.joint1Length = targetXfo.tr.distanceTo(joint1Xfo.tr);
     this.setDirty();
     this.enabled = true;
   }
@@ -958,27 +958,36 @@ class TriangleIKSolver extends zeaEngine.Operator {
 
     ///////////////////////////////
     // Calc joint0Xfo
-    // const joint0TargetVec = targetXfo.tr.subtract(joint0Xfo.tr)
-    // const joint0TargetDist = joint0TargetVec.length()
-    // const joint01Vec = joint0Xfo.ori.rotateVec3(this.Joint0Offset.tr)
+    const joint0TargetVec = targetXfo.tr.subtract(joint0Xfo.tr);
+    const joint0TargetDist = joint0TargetVec.length();
+    const joint01Vec = joint0Xfo.ori.rotateVec3(this.joint1Offset);
 
-    // const Joint0Axis = joint01Vec.cross(joint0TargetVec)
-    // const currAngle = joint01Vec.angleTo(joint0TargetVec)
-    // Joint0Axis.normalizeInPlace()
+    joint01Vec.normalizeInPlace();
+    joint0TargetVec.normalizeInPlace();
 
-    // // Calculate the angle using the rule of cosines.
-    // const angle = 1.0
+    const Joint0Axis = joint0TargetVec.cross(joint01Vec);
+    const currAngle = joint0TargetVec.angleTo(joint01Vec);
+    Joint0Axis.normalizeInPlace();
 
-    // this.align.setFromAxisAndAngle(Joint0Axis, angle - currAngle)
-    // joint0Xfo.ori = this.align.multiply(joint0Xfo.ori)
+    // Calculate the angle using the rule of cosines.
+    // cos C	= (a2 + b2 − c2)/2ab
+    const a = this.joint0Length;
+    const b = joint0TargetDist;
+    const c = this.joint1Length;
+    const angle = Math.acos((a * a + b * b - c * c) / (2 * a * b));
+
+    // console.log(currAngle, angle)
+
+    this.align.setFromAxisAndAngle(Joint0Axis, angle - currAngle);
+    joint0Xfo.ori = this.align.multiply(joint0Xfo.ori);
 
     ///////////////////////////////
     // Calc joint1Xfo
-    joint1Xfo.tr = joint0Xfo.transformVec3(this.Joint1Offset);
+    joint1Xfo.tr = joint0Xfo.transformVec3(this.joint1Offset);
 
     const joint1TargetVec = targetXfo.tr.subtract(joint1Xfo.tr);
     joint1TargetVec.normalizeInPlace();
-    this.align.setFrom2Vectors(joint1Xfo.ori.rotateVec3(this.Joint1TargetOffset), joint1TargetVec);
+    this.align.setFrom2Vectors(joint1Xfo.ori.rotateVec3(this.joint1TargetOffset), joint1TargetVec);
     joint1Xfo.ori = this.align.multiply(joint1Xfo.ori);
 
     ///////////////////////////////
