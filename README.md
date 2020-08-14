@@ -1,3 +1,3 @@
-# FARO-BIM-LiDAR
+# ROBOT PLANNING
 
-Sample application demonstrating BIM and LiDAR data loading using Zea Engine.
+Sample application demonstrating ....
