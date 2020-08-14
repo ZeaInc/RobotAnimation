@@ -1,19 +1,4 @@
-import {
-  Vec3,
-  Quat,
-  Xfo,
-  Ray,
-  Color,
-  Scene,
-  Group,
-  Material,
-  TreeItem,
-  GeomItem,
-  Cuboid,
-  PassType,
-  GLRenderer,
-} from '../libs/zea-engine/dist/index.esm.js'
-import { GLCADPass, CADAsset } from '../libs/zea-cad/dist/index.rawimport.js'
+import { Vec3, Color, Scene, GLRenderer } from '../libs/zea-engine/dist/index.esm.js'
 
 const domElement = document.getElementById('viewport')
 
@@ -43,9 +28,9 @@ scene.getRoot().addChild(treeItem)
 
 ////////////////////////////////////
 // Point Cloud renderer
-// import loadPointCloud from "./1.loadPointCloud.js";
-// const pointCloud = loadPointCloud();
-// scene.getRoot().addChild(pointCloud);
+import loadPointCloud from './1.loadPointCloud.js'
+const pointCloud = loadPointCloud(appData)
+scene.getRoot().addChild(pointCloud)
 
 ////////////////////////////////////
 // Setup the Left side Tree view.
