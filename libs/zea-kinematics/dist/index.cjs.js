@@ -1013,10 +1013,17 @@ class IKJoint {
     // this.output.setParam(globalXfoParam)
   }
 
-  init(parentXfo) {
+  init(baseXfo, parentJoint, childJoint) {
     this.xfo = this.output.getValue().clone(); // until we have an IO output
+    const parentXfo = parentJoint ? parentJoint.xfo : baseXfo;
     this.bindLocalXfo = parentXfo.inverse().multiply(this.xfo);
     this.localXfo = this.bindLocalXfo.clone();
+    if (childJoint) {
+      this.backwardsLocal = childJoint.output
+        .getValue()
+        .inverse()
+        .multiply(this.xfo);
+    }
     this.forwardLocalTr = this.localXfo.tr;
     this.backwardsLocalTr = this.forwardLocalTr.negate();
 
@@ -1033,6 +1040,14 @@ class IKJoint {
         this.axis = Z_AXIS;
         break
     }
+
+    const parentVec = this.xfo.tr.subtract(parentXfo.tr).normalize();
+    this.isTwistJoint = Math.abs(this.xfo.ori.rotateVec3(this.axis).dot(parentVec) - 1) < 0.001;
+    console.log(this.isTwistJoint);
+
+    // const childXfo =
+    // this.xfo = this.output.getValue().clone() // until we have an IO output
+    // this.bindLocalXfo = (parentJoint ? parentJoint : baseXfo).xfo.inverse().multiply(this.xfo)
   }
 
   preEval(parentXfo) {
@@ -1041,27 +1056,14 @@ class IKJoint {
     // this.xfo.tr = parentXfo.tr.add(parentXfo.ori.rotateVec3(this.bindLocalXfo.tr))
   }
 
-  evalBackwards(parentJoint, childJoint, isTip, targetXfo, rootXfo, jointToTip) {
+  evalBackwards(parentJoint, childJoint, isTip, targetXfo, baseXfo, jointToTip) {
     if (isTip) {
       this.xfo.tr = targetXfo.tr.clone();
       this.xfo.ori = targetXfo.ori.clone();
     } else {
-      const targetVec = childJoint.xfo.tr.subtract(rootXfo.tr);
+      const targetVec = childJoint.xfo.tr.subtract(baseXfo.tr);
       const jointVec = this.xfo.ori.rotateVec3(childJoint.forwardLocalTr);
-      if (childJoint.axisId == -2) {
-        // This twist joint can rotate to facilitate its parent rotation
-        if (targetVec.normalize().angleTo(jointVec.normalize()) > 0.0001) {
-          const alignAxis = targetVec.cross(jointVec).normalize();
-          const jointAxis = this.xfo.ori.rotateVec3(this.axis);
-          if (alignAxis.dot(jointAxis) < 0.0) {
-            this.align.setFrom2Vectors(jointAxis.negate(), alignAxis);
-          } else {
-            this.align.setFrom2Vectors(jointAxis, alignAxis);
-          }
-          this.align.alignWith(this.xfo.ori);
-          this.xfo.ori = this.align.multiply(this.xfo.ori);
-        }
-      } else {
+      {
         this.align.setFrom2Vectors(jointToTip.normalize(), targetVec.normalize());
         // this.align.alignWith(this.xfo.ori)
         this.xfo.ori = this.align.multiply(this.xfo.ori);
@@ -1091,9 +1093,9 @@ class IKJoint {
     }
   }
 
-  evalForwards(parentJoint, childJoint, isBase, isTip, rootXfo, targetXfo, jointToTip) {
+  evalForwards(parentJoint, childJoint, isBase, isTip, baseXfo, targetXfo, jointToTip) {
     if (isBase) {
-      this.xfo.tr = rootXfo.tr.add(rootXfo.ori.rotateVec3(this.forwardLocalTr));
+      this.xfo.tr = baseXfo.tr.add(baseXfo.ori.rotateVec3(this.forwardLocalTr));
     } else {
       this.xfo.tr = parentJoint.xfo.tr.add(parentJoint.xfo.ori.rotateVec3(this.forwardLocalTr));
     }
@@ -1101,7 +1103,7 @@ class IKJoint {
       this.xfo.ori = targetXfo.ori;
     } else {
       if (isBase) {
-        jointToTip.subtractInPlace(rootXfo.ori.rotateVec3(this.forwardLocalTr));
+        jointToTip.subtractInPlace(baseXfo.ori.rotateVec3(this.forwardLocalTr));
       } else {
         jointToTip.subtractInPlace(parentJoint.xfo.ori.rotateVec3(this.forwardLocalTr));
       }
@@ -1111,12 +1113,7 @@ class IKJoint {
         if (targetVec.normalize().angleTo(jointVec.normalize()) > 0.0001) {
           const alignAxis = targetVec.cross(jointVec).normalize();
           const childAxis = this.xfo.ori.rotateVec3(childJoint.axis);
-          if (alignAxis.dot(childAxis) < 0.0) {
-            this.align.setFrom2Vectors(childAxis.negate(), alignAxis);
-          } else {
-            this.align.setFrom2Vectors(childAxis, alignAxis);
-          }
-          this.align.alignWith(this.xfo.ori);
+          this.align.setFrom2Vectors(childAxis, alignAxis);
           this.xfo.ori = this.align.multiply(this.xfo.ori);
         }
       } else {
@@ -1128,7 +1125,7 @@ class IKJoint {
     ///////////////////////
     // Apply joint constraint.
     if (isBase) {
-      this.align.setFrom2Vectors(this.xfo.ori.rotateVec3(this.axis), rootXfo.ori.rotateVec3(this.axis));
+      this.align.setFrom2Vectors(this.xfo.ori.rotateVec3(this.axis), baseXfo.ori.rotateVec3(this.axis));
     } else {
       this.align.setFrom2Vectors(this.xfo.ori.rotateVec3(this.axis), parentJoint.xfo.ori.rotateVec3(this.axis));
     }
@@ -1162,7 +1159,7 @@ class IKSolver extends zeaEngine.Operator {
     //   this.removeOutput(event.index)
     // })
 
-    this.addInput(new zeaEngine.OperatorInput('Root'));
+    this.addInput(new zeaEngine.OperatorInput('Base'));
     this.addInput(new zeaEngine.OperatorInput('Target'));
     this.__joints = [];
     this.enabled = false;
@@ -1181,14 +1178,11 @@ class IKSolver extends zeaEngine.Operator {
   }
 
   enable() {
-    const rootXfo = this.getInput('Root').isConnected() ? this.getInput('Root').getValue() : identityXfo;
+    const baseXfo = this.getInput('Base').isConnected() ? this.getInput('Base').getValue() : identityXfo;
     this.__joints.forEach((joint, index) => {
-      if (index > 0) {
-        const prevJoint = this.__joints[index - 1];
-        joint.init(prevJoint.xfo);
-      } else {
-        joint.init(rootXfo);
-      }
+      const parentJoint = index > 0 ? this.__joints[index - 1] : null;
+      const childJoint = index < this.__joints.length ? this.__joints[index + 1] : null;
+      joint.init(baseXfo, parentJoint, childJoint);
     });
     this.enabled = true;
     this.setDirty();
@@ -1204,37 +1198,40 @@ class IKSolver extends zeaEngine.Operator {
       });
       return
     }
-    const rootXfo = this.getInput('Root').isConnected() ? this.getInput('Root').getValue() : identityXfo;
     const targetXfo = this.getInput('Target').getValue();
-    const iterations = this.getParameter('Iterations').getValue();
+    // const rootJoint = this.__joints[0]
+    const baseXfo = this.getInput('Base').isConnected() ? this.getInput('Base').getValue() : identityXfo;
+
     const numJoints = this.__joints.length;
     const tipJoint = this.__joints[numJoints - 1];
 
+    const iterations = this.getParameter('Iterations').getValue();
+
     for (let i = 0; i < numJoints; i++) {
-      const parentXfo = i > 0 ? this.__joints[i - 1].xfo : rootXfo;
+      const parentXfo = i > 0 ? this.__joints[i - 1].xfo : baseXfo;
       this.__joints[i].preEval(parentXfo);
     }
 
     for (let i = 0; i < iterations; i++) {
       {
-        const jointToTip = tipJoint.xfo.tr.subtract(rootXfo.tr);
+        const jointToTip = tipJoint.xfo.tr.subtract(baseXfo.tr);
         for (let j = numJoints - 1; j >= 0; j--) {
           const joint = this.__joints[j];
           const parentJoint = this.__joints[Math.max(j - 1, 0)];
           const childJoint = this.__joints[Math.min(j + 1, numJoints - 1)];
           const isTip = j > 0 && j == numJoints - 1;
-          joint.evalBackwards(parentJoint, childJoint, isTip, targetXfo, rootXfo, jointToTip);
+          joint.evalBackwards(parentJoint, childJoint, isTip, targetXfo, baseXfo, jointToTip);
         }
       }
       {
-        const jointToTip = tipJoint.xfo.tr.subtract(rootXfo.tr);
+        const jointToTip = tipJoint.xfo.tr.subtract(baseXfo.tr);
         for (let j = 0; j < numJoints; j++) {
           const joint = this.__joints[j];
           const parentJoint = this.__joints[Math.max(j - 1, 0)];
           const childJoint = this.__joints[Math.min(j + 1, numJoints - 1)];
           const isBase = j == 0;
           const isTip = j > 0 && j == numJoints - 1;
-          joint.evalForwards(parentJoint, childJoint, isBase, isTip, rootXfo, targetXfo, jointToTip);
+          joint.evalForwards(parentJoint, childJoint, isBase, isTip, baseXfo, targetXfo, jointToTip);
         }
       }
     }
@@ -1248,10 +1245,394 @@ class IKSolver extends zeaEngine.Operator {
 
 zeaEngine.Registry.register('IKSolver', IKSolver);
 
+/** An operator for aiming items at targets.
+ * @extends Operator
+ */
+class AttachmentConstraint extends zeaEngine.Operator {
+  /**
+   * Create a gears operator.
+   * @param {string} name - The name value.
+   */
+  constructor(name) {
+    super(name);
+
+    this.addInput(new zeaEngine.OperatorInput('Time'));
+    this.addOutput(new zeaEngine.OperatorOutput('Attached', zeaEngine.OperatorOutputMode.OP_READ_WRITE));
+
+    this.__attachTargets = [];
+    this.__attachId = -1;
+  }
+
+  addAttachTarget(target, time) {
+    const input = this.addInput(new zeaEngine.OperatorInput('Target' + this.getNumInputs()));
+    input.setParam(target);
+
+    this.__attachTargets.push({
+      input,
+      time,
+      offsetXfo: undefined
+    });
+  }
+
+  getAttachTarget(attachId) {
+    return this.getInputByIndex(attachId + 1)
+  }
+
+  findTarget(time) {
+    if (this.__attachTargets.length == 0 || time <= this.__attachTargets[0].time) {
+      return -1
+    }
+    const numKeys = this.__attachTargets.length;
+    if (time >= this.__attachTargets[numKeys - 1].time) {
+      return numKeys - 1
+    }
+    // Find the first key after the specified time value
+    for (let i = 1; i < numKeys; i++) {
+      const key = this.__attachTargets[i];
+      if (key.time > time) {
+        return i - 1
+      }
+    }
+  }
+
+  /**
+   * The evaluate method.
+   */
+  evaluate() {
+    const time = this.getInput('Time').getValue();
+    const output = this.getOutputByIndex(0);
+    let xfo = output.getValue();
+
+    const attachId = this.findTarget(time);
+    if (attachId != -1) {
+      const currXfo = this.getAttachTarget(attachId).getValue();
+      const attachment = this.__attachTargets[attachId];
+
+      if (attachId != this.__attachId) {
+        if (!attachment.offsetXfo) {
+          if (this.__attachId == -1) {
+            attachment.offsetXfo = currXfo.inverse().multiply(xfo);
+          } else {
+            const prevXfo = this.getAttachTarget(this.__attachId).getValue();
+            const prevOffset = this.__attachTargets[this.__attachId].offsetXfo;
+            const offsetXfo = currXfo.inverse().multiply(prevXfo.multiply(prevOffset));
+            attachment.offsetXfo = offsetXfo;
+          }
+        }
+        this.__attachId = attachId;
+      }
+
+      xfo = currXfo.multiply(attachment.offsetXfo);
+    }
+
+    output.setClean(xfo);
+  }
+}
+
+zeaEngine.Registry.register('AttachmentConstraint', AttachmentConstraint);
+
+/** Class representing a gear parameter.
+ * @extends BaseTrack
+ */
+class BaseTrack extends zeaEngine.EventEmitter {
+  constructor(name) {
+    super();
+    this.name = name;
+    this.keys = [];
+    this.__sampleCache = {};
+  }
+
+  getName() {
+    return this.name
+  }
+
+  getNumKeys() {
+    return this.keys.length
+  }
+
+  getKeyTime(index) {
+    return this.keys[index].time
+  }
+
+  getKeyValue(index) {
+    return this.keys[index].value
+  }
+
+  setKeyValue(index, value) {
+    this.keys[index].value = value;
+    this.emit('keyValueChanged', { index });
+  }
+
+  getTimeRange() {
+    if (this.keys.length == 0) {
+      return new zeaEngine.Vec2(Number.NaN, Number.NaN)
+    }
+    const numKeys = this.keys.length;
+    return new zeaEngine.Vec2(this.keys[0].time, this.keys[numKeys - 1].time)
+  }
+
+  addKey(time, value) {
+    let index;
+    if (this.keys.length == 0 || time < this.keys[0].time) {
+      this.keys.splice(0, 0, { time, value });
+      index = 0;
+    } else {
+      const numKeys = this.keys.length;
+      if (time > this.keys[numKeys - 1].time) {
+        this.keys.push({ time, value });
+        index = numKeys;
+      } else {
+        // Find the first key after the specified time value
+        for (let i = 1; i < numKeys; i++) {
+          const key = this.keys[i];
+          if (key.time > time) {
+            this.keys.splice(i, 0, { time, value });
+            index = i;
+            break
+          }
+        }
+      }
+    }
+
+    this.emit('keyAdded', { index });
+    return index
+  }
+
+  findKeyAndLerp(time) {
+    if (this.keys.length == 0) {
+      return {
+        keyIndex: -1,
+        lerp: 0
+      }
+    }
+    if (time <= this.keys[0].time) {
+      return {
+        keyIndex: 0,
+        lerp: 0
+      }
+    }
+    const numKeys = this.keys.length;
+    if (time >= this.keys[numKeys - 1].time) {
+      return {
+        keyIndex: numKeys - 1,
+        lerp: 0
+      }
+    }
+    // Find the first key after the specified time value
+    for (let i = 1; i < numKeys; i++) {
+      const key = this.keys[i];
+      if (key.time > time) {
+        const prevKey = this.keys[i - 1];
+        const delta = key.time - prevKey.time;
+        return {
+          keyIndex: i - 1,
+          lerp: (time - prevKey.time) / delta
+        }
+      }
+    }
+  }
+
+  evaluate(time) {
+    const keyAndLerp = this.findKeyAndLerp(time);
+  }
+}
+
+class ColorTrack extends BaseTrack {
+  constructor(name) {
+    super(name);
+  }
+
+  evaluate(time) {
+    const keyAndLerp = this.findKeyAndLerp(time);
+
+    const value0 = this.keys[keyAndLerp.keyIndex].value;
+    if (keyAndLerp.lerp > 0.0) {
+      const value1 = this.keys[keyAndLerp.keyIndex + 1].value;
+      return value0.lerp(value1, keyAndLerp.lerp)
+    } else {
+      return value0
+    }
+  }
+}
+
+class XfoTrack extends BaseTrack {
+  constructor(name) {
+    super(name);
+  }
+
+  evaluate(time) {
+    const keyAndLerp = this.findKeyAndLerp(time);
+
+    const value0 = this.keys[keyAndLerp.keyIndex].value;
+    if (keyAndLerp.lerp > 0.0) {
+      const value1 = this.keys[keyAndLerp.keyIndex + 1].value;
+      const tr = value0.tr.lerp(value1.tr, keyAndLerp.lerp);
+      const ori = value0.ori.lerp(value1.ori, keyAndLerp.lerp);
+      return new zeaEngine.Xfo(tr, ori)
+    } else {
+      return value0
+    }
+  }
+}
+
+/** An operator for aiming items at targets.
+ * @extends Operator
+ */
+class TrackSampler extends zeaEngine.Operator {
+  /**
+   * Create a TrackSampler operator.
+   * @param {string} name - The name value.
+   */
+  constructor(name, track) {
+    super(name);
+
+    this.track = track;
+
+    this.addInput(new zeaEngine.OperatorInput('Time'));
+    this.addOutput(new zeaEngine.OperatorOutput('Output', zeaEngine.OperatorOutputMode.OP_WRITE));
+  }
+
+  /**
+   * The evaluate method.
+   */
+  evaluate() {
+    const time = this.getInput('Time').getValue();
+    const output = this.getOutputByIndex(0);
+
+    const xfo = this.track.evaluate(time);
+    output.setClean(xfo);
+  }
+}
+
+/** An operator for aiming items at targets.
+ * @extends Operator
+ */
+class KeyDisplayOperator extends zeaEngine.Operator {
+  /**
+   * Create a gears operator.
+   * @param {BaseTrack} track - The track value.
+   * @param {number} keyIndex - The index of the key in the track
+   */
+  constructor(track, keyIndex) {
+    super(name);
+
+    this.addOutput(new zeaEngine.OperatorOutput('KeyLocal', zeaEngine.OperatorOutputMode.OP_WRITE));
+
+    this.track = track;
+    this.keyIndex = keyIndex;
+    this.track.on('keyValueChanged', event => {
+      if (event.index == this.keyIndex) this.setDirty();
+    });
+  }
+
+  backPropagateValue(value) {
+    this.track.setKeyValue(this.keyIndex, value);
+  }
+
+  /**
+   * The evaluate method.
+   */
+  evaluate() {
+    this.getOutputByIndex(0).setClean(this.track.getKeyValue(this.keyIndex));
+  }
+}
+
+/** An operator for aiming items at targets.
+ * @extends Operator
+ */
+class XfoTrackDisplay extends zeaEngine.GeomItem {
+  /**
+   * Create a TrackDisplay operator.
+   * @param {string} name - The name value.
+   * @param {BaseTrack} track - The track to display.
+   */
+  constructor(track) {
+    super(track.getName());
+
+    this.track = track;
+
+    this.getParameter('Geometry').setValue(new zeaEngine.Lines());
+
+    const linesMat = new zeaEngine.Material('trackLine', 'FlatSurfaceShader');
+    linesMat.getParameter('BaseColor').setValue(new zeaEngine.Color(0.3, 0.3, 0.3));
+    this.getParameter('Material').setValue(linesMat);
+
+    const dotsMat = new zeaEngine.Material('trackDots', 'PointsShader');
+    dotsMat.getParameter('BaseColor').setValue(new zeaEngine.Color(0.75, 0.75, 0.75));
+    this.dotsItem = new zeaEngine.GeomItem('dots', new zeaEngine.Points(), dotsMat);
+    this.addChild(this.dotsItem);
+
+    try {
+      this.__keyMat = new zeaEngine.Material('trackLine', 'HandleShader');
+      this.__keyMat.getParameter('maintainScreenSize').setValue(1);
+      this.__keyCube = new zeaEngine.Cuboid(0.004, 0.004, 0.004);
+    } catch (error) {
+      this.__keyMat = new zeaEngine.Material('trackLine', 'SimpleSurfaceShader');
+      this.__keyCube = new zeaEngine.Cuboid(0.01, 0.01, 0.01);
+    }
+
+    this.__keys = [];
+    this.__updatePath();
+    this.__displayKeys();
+
+    this.track.on('keyValueChanged', event => {
+      this.__updatePath();
+    });
+  }
+
+  __displayKeys() {
+    const displayKey = index => {
+      const handle = new zeaEngine.GeomItem('key' + index, this.__keyCube, this.__keyMat);
+      this.addChild(handle);
+      const keyDisplay = new KeyDisplayOperator(this.track, index);
+      keyDisplay.getOutput('KeyLocal').setParam(handle.getParameter('LocalXfo'));
+      this.__keys.push(handle);
+    };
+
+    const numKeys = this.track.getNumKeys();
+    for (let i = 0; i < numKeys; i++) {
+      displayKey(i);
+    }
+  }
+
+  __updatePath() {
+    const trackLines = this.getParameter('Geometry').getValue();
+    const trackDots = this.dotsItem.getParameter('Geometry').getValue();
+
+    const timeRange = this.track.getTimeRange();
+    const numSamples = Math.round((timeRange.y - timeRange.x) / 50); // Display at 50 samples per second
+
+    trackLines.setNumVertices(numSamples);
+    trackLines.setNumSegments(numSamples + 1);
+
+    trackDots.setNumVertices(numSamples);
+    const linePositions = trackLines.getVertexAttribute('positions');
+    const dotPositions = trackDots.getVertexAttribute('positions');
+    for (let i = 0; i < numSamples; i++) {
+      trackLines.setSegmentVertexIndices(i, i, i + 1);
+      const time = timeRange.x + (timeRange.y - timeRange.x) * (i / numSamples);
+      const xfo = this.track.evaluate(time);
+      linePositions.getValueRef(i).setFromOther(xfo.tr);
+      dotPositions.getValueRef(i).setFromOther(xfo.tr);
+    }
+
+    trackDots.setBoundingBoxDirty();
+    trackDots.emit('geomDataTopologyChanged', {});
+
+    trackLines.setBoundingBoxDirty();
+    trackLines.emit('geomDataTopologyChanged', {});
+  }
+}
+
 exports.AimOperator = AimOperator;
+exports.AttachmentConstraint = AttachmentConstraint;
+exports.ColorTrack = ColorTrack;
 exports.ExplodePartsOperator = ExplodePartsOperator;
 exports.GearsOperator = GearsOperator;
 exports.IKSolver = IKSolver;
 exports.PistonOperator = PistonOperator;
 exports.RamAndPistonOperator = RamAndPistonOperator;
+exports.TrackSampler = TrackSampler;
 exports.TriangleIKSolver = TriangleIKSolver;
+exports.XfoTrack = XfoTrack;
+exports.XfoTrackDisplay = XfoTrackDisplay;

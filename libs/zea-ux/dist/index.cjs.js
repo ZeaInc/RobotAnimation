@@ -4,14 +4,470 @@ Object.defineProperty(exports, '__esModule', { value: true });
 
 var zeaEngine = require('@zeainc/zea-engine');
 
+/**
+ * A Handle is a UI widget that lives in the scene.
+ * Much like a slider, it translates a series of mouse events into a higher level interaction.
+ *
+ * @extends TreeItem
+ */
+class Handle extends zeaEngine.TreeItem {
+  /**
+   * Creates an instance of Handle.
+   *
+   * @param {string} name - The name value.
+   */
+  constructor(name) {
+    super(name);
+
+    this.captured = false;
+  }
+
+  /**
+   * Applies a special shinning shader to the handle to illustrate interaction with it.
+   */
+  highlight() {
+    // console.warn('Implement me')
+  }
+
+  /**
+   * Removes the shining shader from the handle.
+   */
+  unhighlight() {
+    // console.warn('Implement me')
+  }
+
+  /**
+   * Returns the manipulation plane of the handle, denoting a start and a direction.
+   *
+   * @return {Ray} The return value.
+   */
+  getManipulationPlane() {
+    const xfo = this.getParameter('GlobalXfo').getValue();
+    return new zeaEngine.Ray(xfo.tr, xfo.ori.getZaxis())
+  }
+
+  // ///////////////////////////////////
+  // Mouse events
+
+  /**
+   * Event fired when a pointing device is initially moved within the space of the handle.
+   *
+   * @param {MouseEvent} event - The event param.
+   */
+  onMouseEnter(event) {
+    this.highlight();
+  }
+
+  /**
+   * Event fired when a pointing device moves outside of the space of the handle.
+   *
+   * @param {MouseEvent} event - The event param.
+   */
+  onMouseLeave(event) {
+    this.unhighlight();
+  }
+
+  /**
+   * Event fired when a pointing device button is pressed while the pointer is over the handle element.
+   *
+   * @param {MouseEvent} event - The event param.
+   */
+  onMouseDown(event) {
+    event.setCapture(this);
+    event.stopPropagation();
+    this.captured = true;
+    if (event.viewport) this.handleMouseDown(event);
+    else if (event.vrviewport) this.onVRControllerButtonDown(event);
+  }
+
+  /**
+   * Event fired when a pointing device is moved while the cursor's hotspot is over the handle.
+   *
+   * @param {MouseEvent} event - The event param.
+   */
+  onMouseMove(event) {
+    if (this.captured) {
+      event.stopPropagation();
+      if (event.viewport) this.handleMouseMove(event);
+      else if (event.vrviewport) this.onVRPoseChanged(event);
+    }
+  }
+
+  /**
+   * Event fired when a pointing device button is released while the pointer is over the handle.
+   *
+   * @param {MouseEvent} event - The event param.
+   */
+  onMouseUp(event) {
+    if (this.captured) {
+      event.releaseCapture();
+      event.stopPropagation();
+      this.captured = false;
+      if (event.viewport) this.handleMouseUp(event);
+      else if (event.vrviewport) this.onVRControllerButtonUp(event);
+    }
+  }
+
+  /**
+   * Event fired when the user rotates the pointing device wheel over the handle.
+   *
+   * @param {MouseEvent} event - The event param.
+   */
+  onWheel(event) {}
+
+  /**
+   * Handles mouse down interaction with the handle.
+   *
+   * @param {MouseEvent} event - The event param.
+   * @return {boolean} - The return value.
+   */
+  handleMouseDown(event) {
+    this.gizmoRay = this.getManipulationPlane();
+    const dist = event.mouseRay.intersectRayPlane(this.gizmoRay);
+    event.grabPos = event.mouseRay.pointAtDist(dist);
+    this.onDragStart(event);
+    return true
+  }
+
+  /**
+   * Handles mouse move interaction with the handle.
+   *
+   * @param {MouseEvent} event - The event param
+   * @return { boolean } - The return value
+   */
+  handleMouseMove(event) {
+    const dist = event.mouseRay.intersectRayPlane(this.gizmoRay);
+    event.holdPos = event.mouseRay.pointAtDist(dist);
+    this.onDrag(event);
+    return true
+  }
+
+  /**
+   * Handles mouse up interaction with the handle.
+   *
+   * @param {MouseEvent} event - The event param.
+   * @return {boolean} - The return value.
+   */
+  handleMouseUp(event) {
+    const dist = event.mouseRay.intersectRayPlane(this.gizmoRay);
+    event.releasePos = event.mouseRay.pointAtDist(dist);
+    this.onDragEnd(event);
+    return true
+  }
+
+  // ///////////////////////////////////
+  // VRController events
+
+  /**
+   * Event fired when a VR controller button is pressed over the handle.
+   *
+   * @param {object} event - The event param.
+   * @return {boolean} The return value.
+   */
+  onVRControllerButtonDown(event) {
+    this.activeController = event.controller;
+    const xfo = this.activeController.getTipXfo().clone();
+
+    const gizmoRay = this.getManipulationPlane();
+    const offset = xfo.tr.subtract(gizmoRay.start);
+    const grabPos = xfo.tr.subtract(gizmoRay.dir.scale(offset.dot(gizmoRay.dir)));
+    event.grabPos = grabPos;
+    this.onDragStart(event);
+    return true
+  }
+
+  /**
+   * The onVRPoseChanged method.
+   *
+   * @param {object} event - The event param.
+   * @return {boolean} - The return value.
+   */
+  onVRPoseChanged(event) {
+    if (this.activeController) {
+      const xfo = this.activeController.getTipXfo();
+      const gizmoRay = this.getManipulationPlane();
+      const offset = xfo.tr.subtract(gizmoRay.start);
+      const holdPos = xfo.tr.subtract(gizmoRay.dir.scale(offset.dot(gizmoRay.dir)));
+      event.holdPos = holdPos;
+      this.onDrag(event);
+      return true
+    }
+  }
+
+  /**
+   * Event fired when a VR controller button is released over the handle.
+   *
+   * @param {object} event - The event param.
+   * @return {boolean} - The return value.
+   */
+  onVRControllerButtonUp(event) {
+    if (this.activeController == event.controller) {
+      const xfo = this.activeController.getTipXfo();
+      this.onDragEnd(event, xfo.tr);
+      this.activeController = undefined;
+      return true
+    }
+  }
+
+  // ///////////////////////////////////
+  // Interaction events
+
+  /**
+   * Handles the initially drag of the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
+   */
+  onDragStart(event) {
+    console.log('onDragStart', event);
+  }
+
+  /**
+   * Handles drag action of the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
+   */
+  onDrag(event) {
+    console.log('onDrag', event);
+  }
+
+  /**
+   * Handles the end of dragging the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
+   */
+  onDragEnd(event) {
+    console.log('onDragEnd', event);
+  }
+}
+
+/**
+ * Class representing a base linear movement scene widget.
+ *
+ * @extends Handle
+ */
+class BaseLinearMovementHandle extends Handle {
+  /**
+   * Create base linear movement scene widget.
+   * @param {string} name - The name value.
+   */
+  constructor(name) {
+    super(name);
+  }
+
+  // ///////////////////////////////////
+  // Mouse events
+
+  /**
+   * Handles mouse down interaction with the handle.
+   *
+   * @param {MouseEvent} event - The event param.
+   * @return {boolean} - The return value.
+   */
+  handleMouseDown(event) {
+    this.gizmoRay = this.getManipulationPlane();
+    this.grabDist = event.mouseRay.intersectRayVector(this.gizmoRay)[1];
+    const grabPos = this.gizmoRay.pointAtDist(this.grabDist);
+    event.grabDist = this.grabDist;
+    event.grabPos = grabPos;
+    this.onDragStart(event);
+    return true
+  }
+
+  /**
+   * Handles mouse move interaction with the handle.
+   *
+   * @param {MouseEvent} event - The event param
+   */
+  handleMouseMove(event) {
+    const dist = event.mouseRay.intersectRayVector(this.gizmoRay)[1];
+    const holdPos = this.gizmoRay.pointAtDist(dist);
+    event.holdDist = dist;
+    event.holdPos = holdPos;
+    event.value = dist;
+    event.delta = dist - this.grabDist;
+    this.onDrag(event);
+  }
+
+  /**
+   * Handles mouse up interaction with the handle.
+   *
+   * @param {MouseEvent} event - The event param.
+   * @return {boolean} - The return value.
+   */
+  handleMouseUp(event) {
+    const dist = event.mouseRay.intersectRayVector(this.gizmoRay)[1];
+    const releasePos = this.gizmoRay.pointAtDist(dist);
+    event.releasePos = releasePos;
+    this.onDragEnd(event);
+    return true
+  }
+
+  // ///////////////////////////////////
+  // VRController events
+
+  /**
+   * Event fired when a VR controller button is pressed over the handle.
+   *
+   * @param {object} event - The event param.
+   * @return {boolean} The return value.
+   */
+  onVRControllerButtonDown(event) {
+    this.gizmoRay = this.getManipulationPlane();
+
+    this.activeController = event.controller;
+    const xfo = this.activeController.getTipXfo();
+    this.grabDist = xfo.tr.subtract(this.gizmoRay.start).dot(this.gizmoRay.dir);
+    const grabPos = this.gizmoRay.start.add(this.gizmoRay.dir.scale(this.grabDist));
+    event.grabPos = grabPos;
+    this.onDragStart(event);
+    return true
+  }
+
+  /**
+   * The onVRPoseChanged method.
+   *
+   * @param {object} event - The event param.
+   * @return {boolean} The return value.
+   */
+  onVRPoseChanged(event) {
+    const xfo = this.activeController.getTipXfo();
+    const dist = xfo.tr.subtract(this.gizmoRay.start).dot(this.gizmoRay.dir);
+    const holdPos = this.gizmoRay.start.add(this.gizmoRay.dir.scale(dist));
+    event.value = dist;
+    event.holdPos = holdPos;
+    event.delta = dist - this.grabDist;
+    this.onDrag(event);
+    return true
+  }
+
+  /**
+   * Event fired when a VR controller button is released over the handle.
+   *
+   * @param {object} event - The event param.
+   * @return {boolean} - The return value.
+   */
+  onVRControllerButtonUp(event) {
+    if (this.activeController == event.controller) {
+      // const xfo = this.activeController.getTipXfo()
+      this.onDragEnd();
+      this.activeController = undefined;
+      return true
+    }
+  }
+}
+
+/**
+ * Kind of an abstract class, that represents the mandatory structure of a change classes that are used in the [`UndoRedoManager`]().
+ *
+ * @note If you don't extend this class, ensure to implement all methods specified in here.
+ * @extends {EventEmitter}
+ */
+class Change extends zeaEngine.EventEmitter {
+  /**
+   * Every class that extends from `Change` must contain a global `name` attribute.
+   * It is used by the `UndoRedoManager` factory to re-construct the class of the specific implementation of the `Change` class.
+   *
+   * @param {string} name - The name value.
+   */
+  constructor(name) {
+    super();
+    this.name = name ? name : UndoRedoManager.getChangeClassName(this);
+  }
+
+  /**
+   * Called by the `UndoRedoManager` in the `undo` method, and contains the code you wanna run when the undo action is triggered,
+   * of course it depends on what you're doing.
+   *
+   * @note This method needs to be implemented, otherwise it will throw an Error.
+   */
+  undo() {
+    throw new Error('Implement me')
+  }
+
+  /**
+   * Called by the `UndoRedoManager` in the `redo` method, and is the same as the `undo` method, contains the specific code you wanna run.
+   *
+   * @note This method needs to be implemented, otherwise it will throw an Error.
+   */
+  redo() {
+    throw new Error('Implement me')
+  }
+
+  /**
+   * Use this method to update the state of your `Change` class.
+   *
+   * @note This method needs to be implemented, otherwise it will throw an Error.
+   *
+   * @param {object|string|any} updateData - The updateData param.
+   */
+  update(updateData) {
+    throw new Error('Implement me')
+  }
+
+  /**
+   * Serializes the `Change` instance as a JSON object, allowing persistence/replication
+   *
+   * @note This method needs to be implemented, otherwise it will return an empty object.
+   *
+   * @param {object} context - The appData param.
+   * @return {object} The return value.
+   */
+  toJSON(context) {
+    return {}
+  }
+
+  /**
+   * The counterpart of the `toJSON` method, restoring `Change` instance's state with the specified JSON object.
+   * Each `Change` class must implement the logic for reconstructing itself.
+   * Very often used to restore from persisted/replicated JSON.
+   *
+   * @note This method needs to be implemented, otherwise it will do nothing.
+   *
+   * @param {object} j - The j param.
+   * @param {object} context - The context param.
+   */
+  fromJSON(j, context) {}
+
+  /**
+   * Useful method to update the state of an existing identified `Change` through replication.
+   *
+   * @note By default it calls the `update` method in the `Change` class, but you can override this if you need to.
+   *
+   * @param {object} j - The j param.
+   */
+  changeFromJSON(j) {
+    // Many change objects can load json directly
+    // in the update method.
+    this.update(j);
+  }
+
+  /**
+   * Method destined to clean up things that would need to be cleaned manually.
+   * It is executed when flushing the undo/redo stacks or adding a new change to the undo stack,
+   * so it is require in any class that represents a change.
+   *
+   */
+  destroy() {}
+}
+
 const __changeClasses = {};
 const __classNames = {};
 const __classes = [];
 
-/** Class representing an undo redo manager. */
+/**
+ * `UndoRedoManager` is a mixture of the [Factory Design Pattern](https://en.wikipedia.org/wiki/Factory_method_pattern) and the actual changes stacks manager.
+ * This is the heart of the Undo/Redo System, letting you navigate through the changes history you've saved.
+ *
+ * **Events**
+ * * **changeAdded:** Triggered when a change is added.
+ * * **changeUpdated:** Triggered when the last change added updates its state.
+ * * **changeUndone:** Triggered when the `undo` method is called, after removing the last change from the stack.
+ * * **changeRedone:** Triggered when the `redo` method is called, after restoring the last change removed from the undo stack.
+ * */
 class UndoRedoManager extends zeaEngine.EventEmitter {
   /**
-   * Create an undo redo manager.
+   * It doesn't have any parameters, but under the hood it uses [EventsEmitter]() to notify subscribers when something happens.
+   * The implementation is really simple, just initialize it like any other class.
    */
   constructor() {
     super();
@@ -23,7 +479,8 @@ class UndoRedoManager extends zeaEngine.EventEmitter {
   }
 
   /**
-   * The flush method.
+   * As the name indicates, it empties undo/redo stacks permanently, losing all stored actions.
+   * Right now, before flushing the stacks it calls the `destroy` method on all changes, ensure to at least declare it.
    */
   flush() {
     for (const change of this.__undoStack) change.destroy();
@@ -37,18 +494,23 @@ class UndoRedoManager extends zeaEngine.EventEmitter {
   }
 
   /**
-   * The addChange method.
-   * @param {any} change - The change param.
+   * Receives an instance of a class that extends or has the same structure as `Change` class.
+   * When this action happens, the last added change update notifications will get disconnected.
+   * Which implies that any future updates to changes that are not the last one, would need a new call to the `addChange` method.
+   * Also, resets the redo stack(Calls destroy method when doing it).
+   *
+   * @param {Change} change - The change param.
    */
   addChange(change) {
     // console.log("AddChange:", change.name)
-    if (this.__currChange) {
+    if (!(change instanceof Change)) console.warn('Change object is not derived from Change.');
+    if (this.__currChange && this.__currChange.off) {
       this.__currChange.off('updated', this.__currChangeUpdated);
     }
 
     this.__undoStack.push(change);
     this.__currChange = change;
-    this.__currChange.on('updated', this.__currChangeUpdated);
+    if (this.__currChange.on) this.__currChange.on('updated', this.__currChangeUpdated);
 
     for (const change of this.__redoStack) change.destroy();
     this.__redoStack = [];
@@ -57,20 +519,25 @@ class UndoRedoManager extends zeaEngine.EventEmitter {
   }
 
   /**
-   * The getCurrentChange method.
-   * @return {any} The return value.
+   * Returns the last change added to the undo stack, but in case it is empty a `null` is returned.
+   *
+   * @return {Change|null} The return value.
    */
   getCurrentChange() {
     return this.__currChange
   }
 
-  // eslint-disable-next-line require-jsdoc
+  /**
+   * @private
+   * @param {object|any} updateData
+   */
   __currChangeUpdated(updateData) {
     this.emit('changeUpdated', updateData);
   }
 
   /**
-   * The undo method.
+   * Rollback the latest action, passing it to the redo stack in case you wanna recover it later on.
+   *
    * @param {boolean} pushOnRedoStack - The pushOnRedoStack param.
    */
   undo(pushOnRedoStack = true) {
@@ -91,7 +558,8 @@ class UndoRedoManager extends zeaEngine.EventEmitter {
   }
 
   /**
-   * The redo method.
+   * Rollbacks the `undo` action by moving the change from the `redo` stack to the `undo` stack.
+   * Emits the `changeRedone` event, if you want to subscribe to it.
    */
   redo() {
     if (this.__redoStack.length > 0) {
@@ -107,18 +575,20 @@ class UndoRedoManager extends zeaEngine.EventEmitter {
   // User Synchronization
 
   /**
-   * The constructChange method.
+   * Basically returns a new instance of the derived `Change` class. This is why we need the `name` attribute.
+   *
    * @param {string} className - The className param.
-   * @return {any} The return value.
+   * @return {Change} - The return value.
    */
   constructChange(className) {
     return new __changeClasses[className]()
   }
 
   /**
-   * The isChangeClassRegistered method.
-   * @param {object} inst - The instance of the Change class.
-   * @return {boolean} Returns 'true' if the class has been registered.
+   * Checks if a class of an instantiated object is registered in the UndoRedo Factory.
+   *
+   * @param {Change} inst - The instance of the Change class.
+   * @return {boolean} - Returns 'true' if the class has been registered.
    */
   static isChangeClassRegistered(inst) {
     const id = __classes.indexOf(inst.constructor);
@@ -126,9 +596,11 @@ class UndoRedoManager extends zeaEngine.EventEmitter {
   }
 
   /**
-   * The getChangeClassName method.
-   * @param {object} inst - The instance of the Change class.
-   * @return {any} The return value.
+   * Very simple method that returns the name of the instantiated class, checking first in the registry and returning if found,
+   * if not then checks the `name` attribute declared in constructor.
+   *
+   * @param {Change} inst - The instance of the Change class.
+   * @return {string} - The return value.
    */
   static getChangeClassName(inst) {
     const id = __classes.indexOf(inst.constructor);
@@ -138,13 +610,15 @@ class UndoRedoManager extends zeaEngine.EventEmitter {
   }
 
   /**
-   * The registerChange method.
-   * @param {any} name - The name param.
-   * @param {any} cls - The cls param.
+   * Registers the class in the UndoRedoManager Factory.
+   * Why do we need to specify the name of the class?
+   * Because when the code is transpiled, the defined class names change, so it won't be known as we declared it anymore.
+   *
+   * @param {string} name - The name param.
+   * @param {Change} cls - The cls param.
    */
   static registerChange(name, cls) {
-    if (__classes.indexOf(cls) != -1)
-      console.warn("Class already registered:", name);
+    if (__classes.indexOf(cls) != -1) console.warn('Class already registered:', name);
 
     const id = __classes.length;
     __classes.push(cls);
@@ -153,416 +627,20 @@ class UndoRedoManager extends zeaEngine.EventEmitter {
   }
 }
 
-/** Class representing a change. */
-class Change extends zeaEngine.EventEmitter {
-  /**
-   * Create a change.
-   * @param {any} name - The name value.
-   */
-  constructor(name) {
-    super();
-    this.name = name ? name : UndoRedoManager.getChangeClassName(this);
-  }
-
-  /**
-   * The undo method.
-   */
-  undo() {
-    throw new Error('Implement me')
-  }
-
-  /**
-   * The redo method.
-   */
-  redo() {
-    throw new Error('Implement me')
-  }
-
-  /**
-   * The update method.
-   * @param {any} updateData - The updateData param.
-   */
-  update(updateData) {
-    throw new Error('Implement me')
-  }
-
-  /**
-   * The toJSON method.
-   * @param {any} context - The appData param.
-   * @return {any} The return value.
-   */
-  toJSON(context) {
-    return {}
-  }
-
-  /**
-   * The fromJSON method.
-   * @param {any} j - The j param.
-   * @param {any} context - The context param.
-   */
-  fromJSON(j, context) {}
-
-  /**
-   * The changeFromJSON method.
-   * @param {any} j - The j param.
-   */
-  changeFromJSON(j) {
-    // Many change objects can load json directly
-    // in the update method.
-    this.update(j);
-  }
-
-  /**
-   * The destroy method.
-   */
-  destroy() {}
-}
-
-// A Handle is a UI widget that lives in the scene.
-// Much like a slider, it translates a series of
-// mouse events into a higher level interaction.
-
-/** Class representing a scene widget.
- * @extends TreeItem
- */
-class Handle extends zeaEngine.TreeItem {
-  /**
-   * Create a scene widget.
-   * @param {any} name - The name value.
-   */
-  constructor(name) {
-    super(name);
-
-    this.captured = false;
-  }
-
-  /**
-   * The highlight method.
-   */
-  highlight() {}
-
-  /**
-   * The unhighlight method.
-   */
-  unhighlight() {}
-
-  /**
-   * The getManipulationPlane method.
-   * @return {any} The return value.
-   */
-  getManipulationPlane() {
-    const xfo = this.getParameter('GlobalXfo').getValue();
-    return new zeaEngine.Ray(xfo.tr, xfo.ori.getZaxis())
-  }
-
-  // ///////////////////////////////////
-  // Mouse events
-
-  /**
-   * The onMouseEnter method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
-   */
-  onMouseEnter(event) {
-    this.highlight();
-  }
-
-  /**
-   * The onMouseLeave method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
-   */
-  onMouseLeave(event) {
-    this.unhighlight();
-  }
-
-  /**
-   * The onMouseDown method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
-   */
-  onMouseDown(event) {
-    event.setCapture(this);
-    event.stopPropagation();
-    this.captured = true;
-    if (event.viewport) this.handleMouseDown(event);
-    else if (event.vrviewport) this.onVRControllerButtonDown(event);
-  }
-
-  /**
-   * The onMouseMove method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
-   */
-  onMouseMove(event) {
-    if (this.captured) {
-      event.stopPropagation();
-      if (event.viewport) this.handleMouseMove(event);
-      else if (event.vrviewport) this.onVRPoseChanged(event);
-    }
-  }
-
-  /**
-   * The onMouseUp method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
-   */
-  onMouseUp(event) {
-    if (this.captured) {
-      event.releaseCapture();
-      event.stopPropagation();
-      this.captured = false;
-      if (event.viewport) this.handleMouseUp(event);
-      else if (event.vrviewport) this.onVRControllerButtonUp(event);
-    }
-  }
-
-  /**
-   * The onWheel method.
-   * @param {any} event - The event param.
-   */
-  onWheel(event) {}
-
-  /**
-   * The handleMouseDown method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
-   */
-  handleMouseDown(event) {
-    this.gizmoRay = this.getManipulationPlane();
-    const dist = event.mouseRay.intersectRayPlane(this.gizmoRay);
-    event.grabPos = event.mouseRay.pointAtDist(dist);
-    this.onDragStart(event);
-    return true
-  }
-
-  /**
-   * The handleMouseMove method.
-   * @param {any} event - The event param.
-   */
-  handleMouseMove(event) {
-    const dist = event.mouseRay.intersectRayPlane(this.gizmoRay);
-    event.holdPos = event.mouseRay.pointAtDist(dist);
-    this.onDrag(event);
-    return true
-  }
-
-  /**
-   * The handleMouseUp method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
-   */
-  handleMouseUp(event) {
-    const dist = event.mouseRay.intersectRayPlane(this.gizmoRay);
-    event.releasePos = event.mouseRay.pointAtDist(dist);
-    this.onDragEnd(event);
-    return true
-  }
-
-  // ///////////////////////////////////
-  // VRController events
-
-  /**
-   * The onVRControllerButtonDown method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
-   */
-  onVRControllerButtonDown(event) {
-    this.activeController = event.controller;
-    const xfo = this.activeController.getTipXfo().clone();
-
-    const gizmoRay = this.getManipulationPlane();
-    const offset = xfo.tr.subtract(gizmoRay.start);
-    const grabPos = xfo.tr.subtract(
-      gizmoRay.dir.scale(offset.dot(gizmoRay.dir))
-    );
-    event.grabPos = grabPos;
-    this.onDragStart(event);
-    return true
-  }
-
-  /**
-   * The onVRPoseChanged method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
-   */
-  onVRPoseChanged(event) {
-    if (this.activeController) {
-      const xfo = this.activeController.getTipXfo();
-      const gizmoRay = this.getManipulationPlane();
-      const offset = xfo.tr.subtract(gizmoRay.start);
-      const holdPos = xfo.tr.subtract(
-        gizmoRay.dir.scale(offset.dot(gizmoRay.dir))
-      );
-      event.holdPos = holdPos;
-      this.onDrag(event);
-      return true
-    }
-  }
-
-  /**
-   * The onVRControllerButtonUp method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
-   */
-  onVRControllerButtonUp(event) {
-    if (this.activeController == event.controller) {
-      const xfo = this.activeController.getTipXfo();
-      this.onDragEnd(event, xfo.tr);
-      this.activeController = undefined;
-      return true
-    }
-  }
-
-  // ///////////////////////////////////
-  // Interaction events
-
-  /**
-   * The onDragStart method.
-   * @param {any} event - The event param.
-   */
-  onDragStart(event) {
-    console.log('onDragStart', event);
-  }
-
-  /**
-   * The onDrag method.
-   * @param {any} event - The event param.
-   */
-  onDrag(event) {
-    console.log('onDrag', event);
-  }
-
-  /**
-   * The onDragEnd method.
-   * @param {any} event - The event param.
-   */
-  onDragEnd(event) {
-    console.log('onDragEnd', event);
-  }
-}
-
 /**
- * Class representing a base linear movement scene widget.
- * @extends Handle
- */
-class BaseLinearMovementHandle extends Handle {
-  /**
-   * Create base linear movement scene widget.
-   * @param {any} name - The name value.
-   */
-  constructor(name) {
-    super(name);
-  }
-
-  // ///////////////////////////////////
-  // Mouse events
-
-  /**
-   * The handleMouseDown method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
-   */
-  handleMouseDown(event) {
-    this.gizmoRay = this.getManipulationPlane();
-    this.grabDist = event.mouseRay.intersectRayVector(this.gizmoRay)[1];
-    const grabPos = this.gizmoRay.pointAtDist(this.grabDist);
-    event.grabDist = this.grabDist;
-    event.grabPos = grabPos;
-    this.onDragStart(event);
-    return true
-  }
-
-  /**
-   * The handleMouseMove method.
-   * @param {any} event - The event param.
-   */
-  handleMouseMove(event) {
-    const dist = event.mouseRay.intersectRayVector(this.gizmoRay)[1];
-    const holdPos = this.gizmoRay.pointAtDist(dist);
-    event.holdDist = dist;
-    event.holdPos = holdPos;
-    event.value = dist;
-    event.delta = dist - this.grabDist;
-    this.onDrag(event);
-  }
-
-  /**
-   * The handleMouseUp method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
-   */
-  handleMouseUp(event) {
-    const dist = event.mouseRay.intersectRayVector(this.gizmoRay)[1];
-    const releasePos = this.gizmoRay.pointAtDist(dist);
-    event.releasePos = releasePos;
-    this.onDragEnd(event);
-    return true
-  }
-
-  // ///////////////////////////////////
-  // VRController events
-
-  /**
-   * The onVRControllerButtonDown method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
-   */
-  onVRControllerButtonDown(event) {
-    this.gizmoRay = this.getManipulationPlane();
-
-    this.activeController = event.controller;
-    const xfo = this.activeController.getTipXfo();
-    this.grabDist = xfo.tr.subtract(this.gizmoRay.start).dot(this.gizmoRay.dir);
-    const grabPos = this.gizmoRay.start.add(
-      this.gizmoRay.dir.scale(this.grabDist)
-    );
-    event.grabPos = grabPos;
-    this.onDragStart(event);
-    return true
-  }
-
-  /**
-   * The onVRPoseChanged method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
-   */
-  onVRPoseChanged(event) {
-    const xfo = this.activeController.getTipXfo();
-    const dist = xfo.tr.subtract(this.gizmoRay.start).dot(this.gizmoRay.dir);
-    const holdPos = this.gizmoRay.start.add(this.gizmoRay.dir.scale(dist));
-    event.value = dist;
-    event.holdPos = holdPos;
-    event.delta = dist - this.grabDist;
-    this.onDrag(event);
-    return true
-  }
-
-  /**
-   * The onVRControllerButtonUp method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
-   */
-  onVRControllerButtonUp(event) {
-    if (this.activeController == event.controller) {
-      // const xfo = this.activeController.getTipXfo()
-      this.onDragEnd();
-      this.activeController = undefined;
-      return true
-    }
-  }
-}
-
-/**
- * Class representing a parameter value change.
+ * Represents a `Change` class for storing `Parameter` values.
+ *
+ * **Events**
+ * * **updated:** Triggered when the `ParameterValueChange` value is updated.
+ *
  * @extends Change
  */
 class ParameterValueChange$1 extends Change {
   /**
-   * Create a parameter value change.
-   * @param {object} param - The param value.
-   * @param {any} newValue - The newValue value.
-   * @param {number} mode - The mode value.
+   * Creates an instance of ParameterValueChange.
+   *
+   * @param {Parameter} param - The param value.
+   * @param {object|string|number|any} newValue - The newValue value.
    */
   constructor(param, newValue) {
     if (param) {
@@ -579,7 +657,7 @@ class ParameterValueChange$1 extends Change {
   }
 
   /**
-   * The undo method.
+   * Rollbacks the value of the parameter to the previous one, passing it to the redo stack in case you wanna recover it later on.
    */
   undo() {
     if (!this.__param) return
@@ -587,7 +665,8 @@ class ParameterValueChange$1 extends Change {
   }
 
   /**
-   * The redo method.
+   * Rollbacks the `undo` action by moving the change from the `redo` stack to the `undo` stack
+   * and updating the parameter with the new value.
    */
   redo() {
     if (!this.__param) return
@@ -595,8 +674,9 @@ class ParameterValueChange$1 extends Change {
   }
 
   /**
-   * The update method.
-   * @param {any} updateData - The updateData param.
+   * Updates the state of the current parameter change value.
+   *
+   * @param {Parameter} updateData - The updateData param.
    */
   update(updateData) {
     if (!this.__param) return
@@ -606,15 +686,17 @@ class ParameterValueChange$1 extends Change {
   }
 
   /**
-   * The toJSON method.
-   * @param {any} context - The context param.
-   * @return {any} The return value.
+   * Serializes `Parameter` instance value as a JSON object, allowing persistence/replication.
+   *
+   * @param {object} context - The context param.
+   * @return {object} The return value.
    */
   toJSON(context) {
     const j = {
       name: this.name,
       paramPath: this.__param.getPath(),
     };
+
     if (this.__nextValue != undefined) {
       if (this.__nextValue.toJSON) {
         j.value = this.__nextValue.toJSON();
@@ -626,9 +708,10 @@ class ParameterValueChange$1 extends Change {
   }
 
   /**
-   * The fromJSON method.
-   * @param {any} j - The j param.
-   * @param {any} context - The context param.
+   * Restores `Parameter` instance's state with the specified JSON object.
+   *
+   * @param {object} j - The j param.
+   * @param {object} context - The context param.
    */
   fromJSON(j, context) {
     const param = context.appData.scene.getRoot().resolvePath(j.paramPath, 1);
@@ -646,8 +729,9 @@ class ParameterValueChange$1 extends Change {
   }
 
   /**
-   * The changeFromJSON method.
-   * @param {any} j - The j param.
+   * Updates the state of an existing identified `Parameter` through replication.
+   *
+   * @param {object} j - The j param.
    */
   changeFromJSON(j) {
     if (!this.__param) return
@@ -659,7 +743,17 @@ class ParameterValueChange$1 extends Change {
 
 UndoRedoManager.registerChange('ParameterValueChange', ParameterValueChange$1);
 
+/**
+ * Class representing Geometry Data Shader
+ *
+ * @extends {StandardSurfaceGeomDataShader}
+ */
 class HandleGeomDataShader extends zeaEngine.StandardSurfaceGeomDataShader {
+  /**
+   * Creates an instance of HandleGeomDataShader.
+   * @param {*} gl - The gl value
+   * @param {*} floatGeomBuffer - The floatGeomBuffer value
+   */
   constructor(gl, floatGeomBuffer) {
     super(gl);
     this.__shaderStages['VERTEX_SHADER'] = zeaEngine.shaderLibrary.parseShader(
@@ -692,7 +786,7 @@ void main(void) {
   
   if(maintainScreenSize != 0) {
     float dist = modelViewMatrix[3][2];
-    float sc = dist;
+    float sc = abs(dist); // Note: items in front of the camera will have a negative value here.
     mat4 scmat = mat4(
       sc, 0.0, 0.0, 0.0,
       0.0, sc, 0.0, 0.0,
@@ -714,9 +808,19 @@ void main(void) {
   }
 }
 
-zeaEngine.sgFactory.registerClass('HandleGeomDataShader', HandleGeomDataShader);
+zeaEngine.Registry.register('HandleGeomDataShader', HandleGeomDataShader);
 
+/**
+ * Class representing Handle Shader.
+ *
+ * @extends {GLShader}
+ */
 class HandleShader extends zeaEngine.GLShader {
+  /**
+   * Creates an instance of HandleShader.
+   *
+   * @param {*} gl - The gl value
+   */
   constructor(gl) {
     super(gl);
 
@@ -752,7 +856,7 @@ void main(void) {
 
   if(maintainScreenSize != 0) {
     float dist = modelViewMatrix[3][2];
-    float sc = dist;
+    float sc = abs(dist); // Note: items in front of the camera will have a negative value here.
     mat4 scmat = mat4(
       sc, 0.0, 0.0, 0.0,
       0.0, sc, 0.0, 0.0,
@@ -824,6 +928,12 @@ void main(void) {
     this.finalize();
   }
 
+  /**
+   * Returns parameter declarations
+   *
+   * @static
+   * @return {array} - Params declarations
+   */
   static getParamDeclarations() {
     const paramDescs = super.getParamDeclarations();
     paramDescs.push({
@@ -837,10 +947,22 @@ void main(void) {
     return paramDescs
   }
 
+  /**
+   * Returns whether the shader's overlay is true or not.
+   *
+   * @static
+   * @return {boolean} - The overlay value
+   */
   static isOverlay() {
     return true
   }
 
+  /**
+   * Returns shader name
+   *
+   * @static
+   * @return {string} - The Geom Shader value
+   */
   static getGeomDataShaderName() {
     return 'HandleGeomDataShader'
   }
@@ -850,7 +972,7 @@ void main(void) {
   // }
 }
 
-zeaEngine.sgFactory.registerClass('HandleShader', HandleShader);
+zeaEngine.Registry.register('HandleShader', HandleShader);
 
 const transformVertices = (positions, xfo) => {
   for (let i = 0; i < positions.length; i++) {
@@ -860,16 +982,19 @@ const transformVertices = (positions, xfo) => {
   }
 };
 
-/** Class representing a linear movement scene widget.
+/**
+ * Class representing a linear movement scene widget.
+ *
  * @extends BaseLinearMovementHandle
  */
 class LinearMovementHandle extends BaseLinearMovementHandle {
   /**
    * Create a linear movement scene widget.
-   * @param {any} name - The name value.
-   * @param {any} length - The length value.
-   * @param {any} thickness - The thickness value.
-   * @param {any} color - The color value.
+   *
+   * @param {string} name - The name value.
+   * @param {number} length - The length value.
+   * @param {number} thickness - The thickness value.
+   * @param {Color} color - The color value.
    */
   constructor(name, length, thickness, color) {
     super(name);
@@ -881,8 +1006,7 @@ class LinearMovementHandle extends BaseLinearMovementHandle {
     handleMat.getParameter('maintainScreenSize').setValue(1);
     this.colorParam = handleMat.getParameter('BaseColor');
     this.colorParam.setValue(color);
-    const handleGeom = new zeaEngine.Cylinder(thickness, length, 64);
-    handleGeom.getParameter('baseZAtZero').setValue(true);
+    const handleGeom = new zeaEngine.Cylinder(thickness, length, 64, 2, true, true);
     const tipGeom = new zeaEngine.Cone(thickness * 4, thickness * 10, 64, true);
     const handle = new zeaEngine.GeomItem('handle', handleGeom, handleMat);
 
@@ -896,22 +1020,23 @@ class LinearMovementHandle extends BaseLinearMovementHandle {
   }
 
   /**
-   * The highlight method.
+   * Applies a special shinning shader to the handle to illustrate interaction with it.
    */
   highlight() {
     this.colorParam.setValue(this.__hilightedColor);
   }
 
   /**
-   * The unhighlight method.
+   * Removes the shining shader from the handle.
    */
   unhighlight() {
     this.colorParam.setValue(this.__color);
   }
 
   /**
-   * The setTargetParam method.
-   * @param {any} param - The video param.
+   * Sets global xfo target parameter.
+   *
+   * @param {Parameter} param - The video param.
    * @param {boolean} track - The track param.
    */
   setTargetParam(param, track = true) {
@@ -926,15 +1051,18 @@ class LinearMovementHandle extends BaseLinearMovementHandle {
   }
 
   /**
-   * The getTargetParam method.
+   * Returns target's global xfo parameter.
+   *
+   * @return {Parameter} - returns handle's target global Xfo.
    */
   getTargetParam() {
     return this.param ? this.param : this.getParameter('GlobalXfo')
   }
 
   /**
-   * The onDragStart method.
-   * @param {any} event - The event param.
+   * Handles the initially drag of the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDragStart(event) {
     this.grabPos = event.grabPos;
@@ -947,8 +1075,9 @@ class LinearMovementHandle extends BaseLinearMovementHandle {
   }
 
   /**
-   * The onDrag method.
-   * @param {any} event - The event param.
+   * Handles drag action of the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDrag(event) {
     const dragVec = event.holdPos.subtract(this.grabPos);
@@ -966,167 +1095,34 @@ class LinearMovementHandle extends BaseLinearMovementHandle {
   }
 
   /**
-   * The onDragEnd method.
-   * @param {any} event - The event param.
+   * Handles the end of dragging the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDragEnd(event) {
     this.change = null;
-  }
-}
-
-/** Class representing a planar movement scene widget.
- * @extends Handle
- */
-class PlanarMovementHandle extends Handle {
-  /**
-   * Create a planar movement scene widget.
-   * @param {any} name - The name value.
-   */
-  constructor(name) {
-    super(name);
-    this.fullXfoManipulationInVR = true;
-  }
-
-  /**
-   * The setTargetParam method.
-   * @param {any} param - The param param.
-   * @param {boolean} track - The track param.
-   */
-  setTargetParam(param, track = true) {
-    this.param = param;
-    if (track) {
-      const __updateGizmo = () => {
-        this.getParameter('GlobalXfo').setValue(param.getValue());
-      };
-      __updateGizmo();
-      param.on('valueChanged', __updateGizmo);
-    }
-  }
-
-  /**
-   * The getTargetParam method.
-   */
-  getTargetParam() {
-    return this.param ? this.param : this.getParameter('GlobalXfo')
-  }
-
-  /**
-   * The onDragStart method.
-   * @param {any} event - The event param.
-   */
-  onDragStart(event) {
-    this.grabPos = event.grabPos;
-    const param = this.getTargetParam();
-    this.baseXfo = param.getValue();
-    if (event.undoRedoManager) {
-      this.change = new ParameterValueChange$1(param);
-      event.undoRedoManager.addChange(this.change);
-    }
-  }
-
-  /**
-   * The onDrag method.
-   * @param {any} event - The event param.
-   */
-  onDrag(event) {
-    const dragVec = event.holdPos.subtract(this.grabPos);
-
-    const newXfo = this.baseXfo.clone();
-    newXfo.tr.addInPlace(dragVec);
-
-    if (this.change) {
-      this.change.update({
-        value: newXfo,
-      });
-    } else {
-      const param = this.getTargetParam();
-      param.setValue(newXfo);
-    }
-  }
-
-  /**
-   * The onDragEnd method.
-   * @param {any} event - The event param.
-   */
-  onDragEnd(event) {
-    this.change = null;
-  }
-
-  // ///////////////////////////////////
-  // VRController events
-
-  /**
-   * The onVRControllerButtonDown method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
-   */
-  onVRControllerButtonDown(event) {
-    if (this.fullXfoManipulationInVR) {
-      this.activeController = event.controller;
-      const xfo = this.activeController.getTipXfo();
-      const handleXfo = this.getParameter('GlobalXfo').getValue();
-      this.grabOffset = xfo.inverse().multiply(handleXfo);
-    } else {
-      super.onVRControllerButtonDown(event);
-    }
-    return true
-  }
-
-  /**
-   * The onVRPoseChanged method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
-   */
-  onVRPoseChanged(event) {
-    if (this.fullXfoManipulationInVR) {
-      const xfo = this.activeController.getTipXfo();
-      const newXfo = xfo.multiply(this.grabOffset);
-      if (this.change) {
-        this.change.update({
-          value: newXfo,
-        });
-      } else {
-        const param = this.getTargetParam();
-        param.setValue(newXfo);
-      }
-    } else {
-      super.onVRPoseChanged(event);
-    }
-  }
-
-  /**
-   * The onVRControllerButtonUp method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
-   */
-  onVRControllerButtonUp(event) {
-    if (this.fullXfoManipulationInVR) {
-      this.change = null;
-    } else {
-      super.onVRControllerButtonUp(event);
-    }
   }
 }
 
 /**
  * Class representing an axial rotation scene widget.
+ *
  * @extends Handle
  */
 class BaseAxialRotationHandle extends Handle {
   /**
    * Create an axial rotation scene widget.
-   * @param {any} name - The name value.
-   * @param {any} radius - The radius value.
-   * @param {any} thickness - The thickness value.
-   * @param {any} color - The color value.
+   *
+   * @param {string} name - The name value.
    */
   constructor(name) {
     super(name);
   }
 
   /**
-   * The setTargetParam method.
-   * @param {any} param - The param param.
+   * Sets global xfo target parameter
+   *
+   * @param {Parameter} param - The param param.
    * @param {boolean} track - The track param.
    */
   setTargetParam(param, track = true) {
@@ -1141,15 +1137,18 @@ class BaseAxialRotationHandle extends Handle {
   }
 
   /**
-   * The getTargetParam method.
+   * Returns target's global xfo parameter.
+   *
+   * @return {Parameter} - returns handle's target global Xfo.
    */
   getTargetParam() {
     return this.param ? this.param : this.getParameter('GlobalXfo')
   }
 
   /**
-   * The onDragStart method.
-   * @param {any} event - The event param.
+   * Handles the initially drag of the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDragStart(event) {
     this.baseXfo = this.getParameter('GlobalXfo').getValue().clone();
@@ -1171,8 +1170,9 @@ class BaseAxialRotationHandle extends Handle {
   }
 
   /**
-   * The onDrag method.
-   * @param {any} event - The event param.
+   * Handles drag action of the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDrag(event) {
     const vec1 = event.holdPos.subtract(this.baseXfo.tr);
@@ -1185,8 +1185,7 @@ class BaseAxialRotationHandle extends Handle {
     // 180 degrees in a single movement.
     const modulator = dragCircleRadius / this.grabCircleRadius;
     let angle = this.vec0.angleTo(vec1) * modulator;
-    if (this.vec0.cross(vec1).dot(this.baseXfo.ori.getZaxis()) < 0)
-      angle = -angle;
+    if (this.vec0.cross(vec1).dot(this.baseXfo.ori.getZaxis()) < 0) angle = -angle;
 
     if (this.range) {
       angle = Math.clamp(angle, this.range[0], this.range[1]);
@@ -1214,8 +1213,9 @@ class BaseAxialRotationHandle extends Handle {
   }
 
   /**
-   * The onDragEnd method.
-   * @param {any} event - The event param.
+   * Handles the end of dragging the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDragEnd(event) {
     this.change = null;
@@ -1224,15 +1224,17 @@ class BaseAxialRotationHandle extends Handle {
 
 /**
  * Class representing an axial rotation scene widget.
+ *
  * @extends BaseAxialRotationHandle
  */
 class AxialRotationHandle extends BaseAxialRotationHandle {
   /**
    * Create an axial rotation scene widget.
-   * @param {any} name - The name value.
-   * @param {any} radius - The radius value.
-   * @param {any} thickness - The thickness value.
-   * @param {any} color - The color value.
+   *
+   * @param {string} name - The name value.
+   * @param {number} radius - The radius value.
+   * @param {number} thickness - The thickness value.
+   * @param {Color} color - The color value.
    */
   constructor(name, radius, thickness, color) {
     super(name);
@@ -1261,29 +1263,32 @@ class AxialRotationHandle extends BaseAxialRotationHandle {
   }
 
   /**
-   * The highlight method.
+   * Applies a special shinning shader to the handle to illustrate interaction with it.
    */
   highlight() {
     this.colorParam.setValue(this.__hilightedColor);
   }
 
   /**
-   * The unhighlight method.
+   * Removes the shining shader from the handle.
    */
   unhighlight() {
     this.colorParam.setValue(this.__color);
   }
 
   /**
-   * The getBaseXfo method.
+   * Returns handle's global Xfo
+   *
+   * @return {Xfo} - The Xfo value
    */
   getBaseXfo() {
     return this.getParameter('GlobalXfo').getValue()
   }
 
   /**
-   * The onDragStart method.
-   * @param {any} event - The event param.
+   * Handles the initially drag interaction of the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDragStart(event) {
     super.onDragStart(event);
@@ -1293,16 +1298,18 @@ class AxialRotationHandle extends BaseAxialRotationHandle {
   }
 
   /**
-   * The onDrag method.
-   * @param {any} event - The event param.
+   * Handles drag interaction of the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDrag(event) {
     super.onDrag(event);
   }
 
   /**
-   * The onDragEnd method.
-   * @param {any} event - The event param.
+   * Handles the end of dragging interaction with the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDragEnd(event) {
     super.onDragEnd(event);
@@ -1310,16 +1317,19 @@ class AxialRotationHandle extends BaseAxialRotationHandle {
   }
 }
 
-/** Class representing a linear scale scene widget.
+/**
+ * Class representing a linear scale scene widget.
+ *
  * @extends BaseLinearMovementHandle
  */
 class LinearScaleHandle extends BaseLinearMovementHandle {
   /**
    * Create a linear scale scene widget.
-   * @param {any} name - The name value.
-   * @param {any} length - The length value.
-   * @param {any} thickness - The thickness value.
-   * @param {any} color - The color value.
+   *
+   * @param {string} name - The name value.
+   * @param {number} length - The length value.
+   * @param {number} thickness - The thickness value.
+   * @param {Color} color - The color value.
    */
   constructor(name, length, thickness, color) {
     super(name);
@@ -1351,22 +1361,23 @@ class LinearScaleHandle extends BaseLinearMovementHandle {
   }
 
   /**
-   * The highlight method.
+   * Applies a special shinning shader to the handle to illustrate interaction with it.
    */
   highlight() {
     this.colorParam.setValue(this.__hilightedColor);
   }
 
   /**
-   * The unhighlight method.
+   * Removes the shining shader from the handle.
    */
   unhighlight() {
     this.colorParam.setValue(this.__color);
   }
 
   /**
-   * The setTargetParam method.
-   * @param {any} param - The param param.
+   * Sets global xfo target parameter.
+   *
+   * @param {Parameter} param - The video param.
    * @param {boolean} track - The track param.
    */
   setTargetParam(param, track = true) {
@@ -1381,15 +1392,18 @@ class LinearScaleHandle extends BaseLinearMovementHandle {
   }
 
   /**
-   * The getTargetParam method.
+   * Returns target's global xfo parameter.
+   *
+   * @return {Parameter} - returns handle's target global Xfo.
    */
   getTargetParam() {
     return this.param ? this.param : this.getParameter('GlobalXfo')
   }
 
   /**
-   * The onDragStart method.
-   * @param {any} event - The event param.
+   * Handles the initially drag of the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDragStart(event) {
     this.grabDist = event.grabDist;
@@ -1404,8 +1418,9 @@ class LinearScaleHandle extends BaseLinearMovementHandle {
   }
 
   /**
-   * The onDrag method.
-   * @param {any} event - The event param.
+   * Handles drag action of the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDrag(event) {
     // const dragVec = event.holdPos.subtract(this.grabPos);
@@ -1420,11 +1435,7 @@ class LinearScaleHandle extends BaseLinearMovementHandle {
     // const scZ = this.baseXfo.ori.getZaxis().dot(scAxis);
     // console.log("sc:", sc, " scX", scX, " scY:", scY, " scZ:", scZ)
     // newXfo.sc.set(scX, scY, scZ);
-    newXfo.sc.set(
-      this.baseXfo.sc.x * sc,
-      this.baseXfo.sc.y * sc,
-      this.baseXfo.sc.z * sc
-    );
+    newXfo.sc.set(this.baseXfo.sc.x * sc, this.baseXfo.sc.y * sc, this.baseXfo.sc.z * sc);
 
     // Scale inheritance is disabled for handles.
     // (XfoHandle throws away scale in _cleanGlobalXfo).
@@ -1443,8 +1454,9 @@ class LinearScaleHandle extends BaseLinearMovementHandle {
   }
 
   /**
-   * The onDragEnd method.
-   * @param {any} event - The event param.
+   * Handles the end of dragging the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDragEnd(event) {
     this.change = null;
@@ -1461,15 +1473,16 @@ class LinearScaleHandle extends BaseLinearMovementHandle {
 
 /**
  * Class representing an axial rotation scene widget.
+ *
  * @extends Handle
  */
 class SphericalRotationHandle extends Handle {
   /**
    * Create an axial rotation scene widget.
-   * @param {any} name - The name value.
-   * @param {any} radius - The radius value.
-   * @param {any} thickness - The thickness value.
-   * @param {any} color - The color value.
+   *
+   * @param {string} name - The name value.
+   * @param {number} radius - The radius value.
+   * @param {Color} color - The color value.
    */
   constructor(name, radius, color) {
     super(name);
@@ -1484,22 +1497,23 @@ class SphericalRotationHandle extends Handle {
   }
 
   /**
-   * The highlight method.
+   * Applies a special shinning shader to the handle to illustrate interaction with it.
    */
   highlight() {
     // this.colorParam.setValue(this.__hilightedColor);
   }
 
   /**
-   * The unhighlight method.
+   * Removes the shining shader from the handle.
    */
   unhighlight() {
     // this.colorParam.setValue(this.__color);
   }
 
   /**
-   * The setTargetParam method.
-   * @param {any} param - The param param.
+   * Sets global xfo target parameter.
+   *
+   * @param {Parameter} param - The video param.
    * @param {boolean} track - The track param.
    */
   setTargetParam(param, track = true) {
@@ -1514,7 +1528,9 @@ class SphericalRotationHandle extends Handle {
   }
 
   /**
-   * The getTargetParam method.
+   * Returns target's global xfo parameter.
+   *
+   * @return {Parameter} - returns handle's target global Xfo.
    */
   getTargetParam() {
     return this.param ? this.param : this.getParameter('GlobalXfo')
@@ -1524,9 +1540,10 @@ class SphericalRotationHandle extends Handle {
   // Mouse events
 
   /**
-   * The handleMouseDown method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * Handles mouse down interaction with the handle.
+   *
+   * @param {MouseEvent} event - The event param.
+   * @return {boolean} - The return value.
    */
   handleMouseDown(event) {
     // const xfo = this.getParameter('GlobalXfo').getValue();
@@ -1541,8 +1558,10 @@ class SphericalRotationHandle extends Handle {
   }
 
   /**
-   * The handleMouseMove method.
-   * @param {any} event - The event param.
+   * Handles mouse move interaction with the handle.
+   *
+   * @param {MouseEvent} event - The event param
+   * @return {boolean} - The return value
    */
   handleMouseMove(event) {
     // const dist = event.mouseRay.intersectRaySphere(this.sphere);
@@ -1552,9 +1571,10 @@ class SphericalRotationHandle extends Handle {
   }
 
   /**
-   * The handleMouseUp method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * Handles mouse up interaction with the handle.
+   *
+   * @param {MouseEvent} event - The event param.
+   * @return {boolean} - The return value.
    */
   handleMouseUp(event) {
     // const dist = event.mouseRay.intersectRaySphere(this.sphere);
@@ -1564,8 +1584,9 @@ class SphericalRotationHandle extends Handle {
   }
 
   /**
-   * The onDragStart method.
-   * @param {any} event - The event param.
+   * Handles the initially drag of the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDragStart(event) {
     this.baseXfo = this.getParameter('GlobalXfo').getValue();
@@ -1587,8 +1608,9 @@ class SphericalRotationHandle extends Handle {
   }
 
   /**
-   * The onDrag method.
-   * @param {any} event - The event param.
+   * Handles drag action of the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDrag(event) {
     const vec1 = event.holdPos.subtract(this.baseXfo.tr);
@@ -1613,8 +1635,9 @@ class SphericalRotationHandle extends Handle {
   }
 
   /**
-   * The onDragEnd method.
-   * @param {any} event - The event param.
+   * Handles the end of dragging the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDragEnd(event) {
     this.change = null;
@@ -1623,16 +1646,162 @@ class SphericalRotationHandle extends Handle {
   }
 }
 
-/** Class representing a planar movement scene widget.
+/**
+ * Class representing a planar movement scene widget.
+ *
+ * @extends Handle
+ */
+class PlanarMovementHandle extends Handle {
+  /**
+   * Create a planar movement scene widget.
+   *
+   * @param {string} name - The name value.
+   */
+  constructor(name) {
+    super(name);
+    this.fullXfoManipulationInVR = true;
+  }
+
+  /**
+   * Sets global xfo target parameter.
+   *
+   * @param {Parameter} param - The video param.
+   * @param {boolean} track - The track param.
+   */
+  setTargetParam(param, track = true) {
+    this.param = param;
+    if (track) {
+      const __updateGizmo = () => {
+        this.getParameter('GlobalXfo').setValue(param.getValue());
+      };
+      __updateGizmo();
+      param.on('valueChanged', __updateGizmo);
+    }
+  }
+
+  /**
+   * Returns target's global xfo parameter.
+   *
+   * @return {Parameter} - returns handle's target global Xfo.
+   */
+  getTargetParam() {
+    return this.param ? this.param : this.getParameter('GlobalXfo')
+  }
+
+  /**
+   * Handles the initially drag of the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
+   */
+  onDragStart(event) {
+    this.grabPos = event.grabPos;
+    const param = this.getTargetParam();
+    this.baseXfo = param.getValue();
+    if (event.undoRedoManager) {
+      this.change = new ParameterValueChange$1(param);
+      event.undoRedoManager.addChange(this.change);
+    }
+  }
+
+  /**
+   * Handles drag action of the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
+   */
+  onDrag(event) {
+    const dragVec = event.holdPos.subtract(this.grabPos);
+
+    const newXfo = this.baseXfo.clone();
+    newXfo.tr.addInPlace(dragVec);
+
+    if (this.change) {
+      this.change.update({
+        value: newXfo,
+      });
+    } else {
+      const param = this.getTargetParam();
+      param.setValue(newXfo);
+    }
+  }
+
+  /**
+   * Handles the end of dragging the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
+   */
+  onDragEnd(event) {
+    this.change = null;
+  }
+
+  // ///////////////////////////////////
+  // VRController events
+
+  /**
+   * Event fired when a VR controller button is pressed over the handle.
+   *
+   * @param {object} event - The event param.
+   * @return {boolean} The return value.
+   */
+  onVRControllerButtonDown(event) {
+    if (this.fullXfoManipulationInVR) {
+      this.activeController = event.controller;
+      const xfo = this.activeController.getTipXfo();
+      const handleXfo = this.getParameter('GlobalXfo').getValue();
+      this.grabOffset = xfo.inverse().multiply(handleXfo);
+    } else {
+      super.onVRControllerButtonDown(event);
+    }
+    return true
+  }
+
+  /**
+   * The onVRPoseChanged method.
+   *
+   * @param {object} event - The event param.
+   */
+  onVRPoseChanged(event) {
+    if (this.fullXfoManipulationInVR) {
+      const xfo = this.activeController.getTipXfo();
+      const newXfo = xfo.multiply(this.grabOffset);
+      if (this.change) {
+        this.change.update({
+          value: newXfo,
+        });
+      } else {
+        const param = this.getTargetParam();
+        param.setValue(newXfo);
+      }
+    } else {
+      super.onVRPoseChanged(event);
+    }
+  }
+
+  /**
+   * Event fired when a VR controller button is released over the handle.
+   *
+   * @param {object} event - The event param.
+   */
+  onVRControllerButtonUp(event) {
+    if (this.fullXfoManipulationInVR) {
+      this.change = null;
+    } else {
+      super.onVRControllerButtonUp(event);
+    }
+  }
+}
+
+/**
+ * Class representing a planar movement scene widget.
+ *
  * @extends Handle
  */
 class XfoPlanarMovementHandle extends PlanarMovementHandle {
   /**
    * Create a planar movement scene widget.
-   * @param {any} name - The name value.
-   * @param {any} size - The size value.
-   * @param {any} color - The color value.
-   * @param {any} offset - The offset value.
+   * @param {string} name - The name value.
+   * @param {number} size - The size value.
+   * @param {Color} color - The color value.
+   * @param {Vec3} offset - The offset value.
    */
   constructor(name, size, color, offset) {
     super(name);
@@ -1663,14 +1832,14 @@ class XfoPlanarMovementHandle extends PlanarMovementHandle {
   }
 
   /**
-   * The highlight method.
+   * Applies a special shinning shader to the handle to illustrate interaction with it.
    */
   highlight() {
     this.colorParam.setValue(this.__hilightedColor);
   }
 
   /**
-   * The unhighlight method.
+   * Removes the shining shader from the handle.
    */
   unhighlight() {
     this.colorParam.setValue(this.__color);
@@ -1679,13 +1848,15 @@ class XfoPlanarMovementHandle extends PlanarMovementHandle {
 
 /**
  * Class representing an xfo handle.
+ *
  * @extends TreeItem
  */
 class XfoHandle extends zeaEngine.TreeItem {
   /**
    * Create an axial rotation scene widget.
-   * @param {any} size - The size value.
-   * @param {any} thickness - The thickness value.
+   *
+   * @param {number} size - The size value.
+   * @param {number} thickness - The thickness value.
    */
   constructor(size, thickness) {
     super('XfoHandle');
@@ -1705,36 +1876,21 @@ class XfoHandle extends zeaEngine.TreeItem {
     blue.a = 0.8;
 
     {
-      const linearXWidget = new LinearMovementHandle(
-        'linearX',
-        size,
-        thickness,
-        red
-      );
+      const linearXWidget = new LinearMovementHandle('linearX', size, thickness, red);
       const xfo = new zeaEngine.Xfo();
       xfo.ori.setFromAxisAndAngle(new zeaEngine.Vec3(0, 1, 0), Math.PI * 0.5);
       linearXWidget.getParameter('LocalXfo').setValue(xfo);
       translationHandles.addChild(linearXWidget);
     }
     {
-      const linearYWidget = new LinearMovementHandle(
-        'linearY',
-        size,
-        thickness,
-        green
-      );
+      const linearYWidget = new LinearMovementHandle('linearY', size, thickness, green);
       const xfo = new zeaEngine.Xfo();
       xfo.ori.setFromAxisAndAngle(new zeaEngine.Vec3(1, 0, 0), Math.PI * -0.5);
       linearYWidget.getParameter('LocalXfo').setValue(xfo);
       translationHandles.addChild(linearYWidget);
     }
     {
-      const linearZWidget = new LinearMovementHandle(
-        'linearZ',
-        size,
-        thickness,
-        blue
-      );
+      const linearZWidget = new LinearMovementHandle('linearZ', size, thickness, blue);
       translationHandles.addChild(linearZWidget);
     }
 
@@ -1783,11 +1939,7 @@ class XfoHandle extends zeaEngine.TreeItem {
     rotationHandles.setVisible(false);
     this.addChild(rotationHandles);
     {
-      const rotationWidget = new SphericalRotationHandle(
-        'rotation',
-        size - thickness,
-        new zeaEngine.Color(1, 1, 1, 0.4)
-      );
+      const rotationWidget = new SphericalRotationHandle('rotation', size - thickness, new zeaEngine.Color(1, 1, 1, 0.4));
       rotationHandles.addChild(rotationWidget);
       // const maskMat = new Material('mask', 'HandleShader');
       // maskMat
@@ -1798,36 +1950,21 @@ class XfoHandle extends zeaEngine.TreeItem {
       // rotationHandles.addChild(maskGeomItem);
     }
     {
-      const rotationXWidget = new AxialRotationHandle(
-        'rotationX',
-        size,
-        thickness,
-        red
-      );
+      const rotationXWidget = new AxialRotationHandle('rotationX', size, thickness, red);
       const xfo = new zeaEngine.Xfo();
       xfo.ori.setFromAxisAndAngle(new zeaEngine.Vec3(0, 1, 0), Math.PI * 0.5);
       rotationXWidget.getParameter('LocalXfo').setValue(xfo);
       rotationHandles.addChild(rotationXWidget);
     }
     {
-      const rotationYWidget = new AxialRotationHandle(
-        'rotationY',
-        size,
-        thickness,
-        green
-      );
+      const rotationYWidget = new AxialRotationHandle('rotationY', size, thickness, green);
       const xfo = new zeaEngine.Xfo();
       xfo.ori.setFromAxisAndAngle(new zeaEngine.Vec3(1, 0, 0), Math.PI * 0.5);
       rotationYWidget.getParameter('LocalXfo').setValue(xfo);
       rotationHandles.addChild(rotationYWidget);
     }
     {
-      const rotationZWidget = new AxialRotationHandle(
-        'rotationZ',
-        size,
-        thickness,
-        blue
-      );
+      const rotationZWidget = new AxialRotationHandle('rotationZ', size, thickness, blue);
       rotationHandles.addChild(rotationZWidget);
     }
 
@@ -1839,44 +1976,32 @@ class XfoHandle extends zeaEngine.TreeItem {
 
     const scaleHandleLength = size * 0.95;
     {
-      const scaleXWidget = new LinearScaleHandle(
-        'scaleX',
-        scaleHandleLength,
-        thickness,
-        red
-      );
+      const scaleXWidget = new LinearScaleHandle('scaleX', scaleHandleLength, thickness, red);
       const xfo = new zeaEngine.Xfo();
       xfo.ori.setFromAxisAndAngle(new zeaEngine.Vec3(0, 1, 0), Math.PI * 0.5);
       scaleXWidget.getParameter('LocalXfo').setValue(xfo);
       scaleHandles.addChild(scaleXWidget);
     }
     {
-      const scaleYWidget = new LinearScaleHandle(
-        'scaleY',
-        scaleHandleLength,
-        thickness,
-        green
-      );
+      const scaleYWidget = new LinearScaleHandle('scaleY', scaleHandleLength, thickness, green);
       const xfo = new zeaEngine.Xfo();
       xfo.ori.setFromAxisAndAngle(new zeaEngine.Vec3(1, 0, 0), Math.PI * -0.5);
       scaleYWidget.getParameter('LocalXfo').setValue(xfo);
       scaleHandles.addChild(scaleYWidget);
     }
     {
-      const scaleZWidget = new LinearScaleHandle(
-        'scaleZ',
-        scaleHandleLength,
-        thickness,
-        blue
-      );
+      const scaleZWidget = new LinearScaleHandle('scaleZ', scaleHandleLength, thickness, blue);
       scaleHandles.addChild(scaleZWidget);
     }
   }
 
   /**
-   * Calculate the global Xfo for the handls.
+   * Calculate the global Xfo for the handles.
+   *
+   * @return {Xfo} - The Xfo value
+   * @private
    */
-  _cleanGlobalXfo(prevValue) {
+  _cleanGlobalXfo() {
     const parentItem = this.getParentItem();
     if (parentItem !== undefined) {
       const parentXfo = parentItem.getParameter('GlobalXfo').getValue().clone();
@@ -1886,11 +2011,12 @@ class XfoHandle extends zeaEngine.TreeItem {
   }
 
   /**
-   * The showHandles method.
-   * @param {any} name - The name param.
-   * @return {any} The return value.
+   * Displays handles depending on the specified mode(Move, Rotate, Scale).
+   * If nothing is specified, it hides all of them.
+   *
+   * @param {number} handleManipulationMode - The mode of the Xfo parameter
    */
-  showHandles(name) {
+  showHandles(handleManipulationMode) {
     this.traverse((item) => {
       if (item != this) {
         item.setVisible(false);
@@ -1898,13 +2024,14 @@ class XfoHandle extends zeaEngine.TreeItem {
       }
     });
 
-    const child = this.getChildByName(name);
+    const child = this.getChildByName(handleManipulationMode);
     if (child) child.setVisible(true);
   }
 
   /**
-   * The setTargetParam method.
-   * @param {any} param - The param param.
+   * Sets global xfo target parameter.
+   *
+   * @param {Parameter} param - The video param.
    */
   setTargetParam(param) {
     this.param = param;
@@ -1914,38 +2041,37 @@ class XfoHandle extends zeaEngine.TreeItem {
   }
 }
 
-/** An operator for aiming items at targets.
- * @extends Operator
+/**
+ * An operator for aiming items at targets.
  *
+ * @extends {Operator}
  */
 class SelectionGroupXfoOperator extends zeaEngine.Operator {
   /**
-   * Create a GroupMemberXfoOperator operator.
-   * @param {Parameter} groupGlobalXfoParam - The GlobalXfo param found on the Group.
+   * Creates an instance of SelectionGroupXfoOperator.
+   *
+   * @param {number} initialXfoModeParam - Initial XFO Mode, check `INITIAL_XFO_MODES` in `Group` documentation
+   * @param {XfoParameter} globalXfoParam - The GlobalXfo param found on the Group.
    */
   constructor(initialXfoModeParam, globalXfoParam) {
     super();
-    this.addInput(new zeaEngine.OperatorInput('InitialXfoMode')).setParam(
-      initialXfoModeParam
-    );
-    this.addOutput(new zeaEngine.OperatorOutput('GroupGlobalXfo')).setParam(
-      globalXfoParam
-    );
+    this.addInput(new zeaEngine.OperatorInput('InitialXfoMode')).setParam(initialXfoModeParam);
+    this.addOutput(new zeaEngine.OperatorOutput('GroupGlobalXfo')).setParam(globalXfoParam);
   }
 
   /**
-   * adds a new item to the SelectionGroupXfoOperator.
+   * Updates operator inputs(`OperatorInput`) of current `Operator` using the specified `TreeItem`.
+   *
    * @param {TreeItem} item - The tree item being added
    */
   addItem(item) {
-    this.addInput(
-      new zeaEngine.OperatorInput('MemberGlobalXfo' + this.getNumInputs())
-    ).setParam(item.getParameter('GlobalXfo'));
+    this.addInput(new zeaEngine.OperatorInput('MemberGlobalXfo' + this.getNumInputs())).setParam(item.getParameter('GlobalXfo'));
     this.setDirty();
   }
 
   /**
-   * removes an item that was previously added to the SelectionGroupXfoOperator.
+   * Finds and removes the `OperatorInput` of the specified `TreeItem` from current`Operator`.
+   *
    * @param {TreeItem} item - The Bind Xfo calculated from the initial Transforms of the Group Members.
    */
   removeItem(item) {
@@ -1963,7 +2089,9 @@ class SelectionGroupXfoOperator extends zeaEngine.Operator {
   }
 
   /**
-   * Move the group. When the selection group is manipulated, this method is called. Here we propagate the delta to each of the selection members.
+   * Move the group. When the selection group is manipulated, this method is called.
+   * Here we propagate the delta to each of the selection members.
+   *
    * @param {Xfo} xfo - The new value being set to the Groups GlobalXfo param.
    */
   backPropagateValue(xfo) {
@@ -1980,7 +2108,7 @@ class SelectionGroupXfoOperator extends zeaEngine.Operator {
   }
 
   /**
-   * Calculate a new Xfo for the group based on the members.
+   * Calculates a new Xfo for the group based on the members.
    */
   evaluate() {
     const groupTransformOutput = this.getOutput('GroupGlobalXfo');
@@ -2026,21 +2154,36 @@ class SelectionGroupXfoOperator extends zeaEngine.Operator {
   }
 }
 
-/** Class representing a selection group */
+/**
+ * A specific type of `Group` class that contains/handles selection of one or more items from the scene.
+ *
+ * **Option parameter values**
+ *
+ * | Option | type | default | Description |
+ * | --- | --- | --- | --- |
+ * | selectionOutlineColor | `Color` | `new Color('#03e3ac'))`  and opacity of `0.1` | See `Color` documentation |
+ * | branchSelectionOutlineColor | `Color` | `new Color('#81f1d5')` and opacity of `0.55` | See `Color` documentation |
+ *
+ * @extends {Group}
+ */
 class SelectionGroup extends zeaEngine.Group {
+  /**
+   * Creates an instance of SelectionGroup.
+   *
+   *
+   * **Parameters**
+   * @param {object} options - Custom options for selection
+   */
   constructor(options) {
     super();
 
     let selectionColor;
     let subtreeColor;
-    if (options.selectionOutlineColor)
-      selectionColor = options.selectionOutlineColor;
-    else {
-      selectionColor = new zeaEngine.Color('#03E3AC');
-      selectionColor.a = 0.1;
-    }
-    if (options.branchSelectionOutlineColor)
-      subtreeColor = options.branchSelectionOutlineColor;
+    options.selectionOutlineColor
+      ? (selectionColor = options.selectionOutlineColor)
+      : (selectionColor = new zeaEngine.Color(3, 227, 172, 0.1));
+
+    if (options.branchSelectionOutlineColor) subtreeColor = options.branchSelectionOutlineColor;
     else {
       subtreeColor = selectionColor.lerp(new zeaEngine.Color('white'), 0.5);
       subtreeColor.a = 0.1;
@@ -2049,9 +2192,7 @@ class SelectionGroup extends zeaEngine.Group {
     this.getParameter('HighlightColor').setValue(selectionColor);
     this.addParameter(new zeaEngine.ColorParameter('SubtreeHighlightColor', subtreeColor));
 
-    this.getParameter('InitialXfoMode').setValue(
-      zeaEngine.Group.INITIAL_XFO_MODES.average
-    );
+    this.getParameter('InitialXfoMode').setValue(zeaEngine.Group.INITIAL_XFO_MODES.average);
     this.__itemsParam.setFilterFn((item) => item instanceof zeaEngine.BaseItem);
 
     this.selectionGroupXfoOp = new SelectionGroupXfoOperator(
@@ -2060,13 +2201,23 @@ class SelectionGroup extends zeaEngine.Group {
     );
   }
 
-  clone(flags) {
+  /**
+   * Constructs a new selection group by copying the values from current one and returns it.
+   *
+   * @return {SelectionGroup} - Cloned selection group.
+   */
+  clone() {
     const cloned = new SelectionGroup();
-    cloned.copyFrom(this, flags);
+    cloned.copyFrom(this);
     return cloned
   }
 
-  // eslint-disable-next-line require-jsdoc
+  /**
+   *
+   * @param {TreeItem} item -
+   * @param {number} index -
+   * @private
+   */
   __bindItem(item, index) {
     if (item instanceof zeaEngine.TreeItem) {
       const highlightColor = this.getParameter('HighlightColor').getValue();
@@ -2074,43 +2225,49 @@ class SelectionGroup extends zeaEngine.Group {
       const subTreeColor = this.getParameter('SubtreeHighlightColor').getValue();
       item.addHighlight('selected' + this.getId(), highlightColor, false);
       item.getChildren().forEach((childItem) => {
-        if (childItem instanceof zeaEngine.TreeItem)
-          childItem.addHighlight(
-            'branchselected' + this.getId(),
-            subTreeColor,
-            true
-          );
+        if (childItem instanceof zeaEngine.TreeItem) childItem.addHighlight('branchselected' + this.getId(), subTreeColor, true);
       });
 
       this.selectionGroupXfoOp.addItem(item, index);
     }
   }
 
-  // eslint-disable-next-line require-jsdoc
+  /**
+   *
+   * @param {TreeItem} item -
+   * @param {number} index -
+   * @private
+   */
   __unbindItem(item, index) {
     if (item instanceof zeaEngine.TreeItem) {
       item.removeHighlight('selected' + this.getId());
       item.getChildren().forEach((childItem) => {
-        if (childItem instanceof zeaEngine.TreeItem)
-          childItem.removeHighlight('branchselected' + this.getId(), true);
+        if (childItem instanceof zeaEngine.TreeItem) childItem.removeHighlight('branchselected' + this.getId(), true);
       });
 
       this.selectionGroupXfoOp.removeItem(item, index);
     }
   }
 
+  /**
+   * calc Group Xfo
+   * @private
+   */
   calcGroupXfo() {}
 }
 
-/** Class representing a selection change.
+/**
+ * Represents a `Change` class for storing `Selection` values.
+ *
  * @extends Change
  */
 class SelectionChange extends Change {
   /**
-   * Create a selection change.
-   * @param {any} selectionManager - The selectionManager value.
-   * @param {any} prevSelection - The prevSelection value.
-   * @param {any} newSelection - The newSelection value.
+   * Creates an instance of SelectionChange.
+   *
+   * @param {SelectionManager} selectionManager - The selectionManager value.
+   * @param {Set} prevSelection - The prevSelection value.
+   * @param {Set} newSelection - The newSelection value.
    */
   constructor(selectionManager, prevSelection, newSelection) {
     super('SelectionChange');
@@ -2120,23 +2277,24 @@ class SelectionChange extends Change {
   }
 
   /**
-   * The undo method.
+   * Sets the state of selections to the previous list of items selected.
    */
   undo() {
     this.__selectionManager.setSelection(this.__prevSelection, false);
   }
 
   /**
-   * The redo method.
+   * Restores the state of the selections to the latest the list of items selected.
    */
   redo() {
     this.__selectionManager.setSelection(this.__newSelection, false);
   }
 
   /**
-   * The toJSON method.
-   * @param {any} appData - The appData param.
-   * @return {any} The return value.
+   * Serializes selection values as a JSON object, allowing persistence/replication.
+   *
+   * @param {object} context - The appData param.
+   * @return {object} The return value.
    */
   toJSON(context) {
     const j = super.toJSON(context);
@@ -2150,9 +2308,10 @@ class SelectionChange extends Change {
   }
 
   /**
-   * The fromJSON method.
-   * @param {any} j - The j param.
-   * @param {any} context - The context param.
+   * Restores selection state from a JSON object.
+   *
+   * @param {object} j - The j param.
+   * @param {object} context - The context param.
    */
   fromJSON(j, context) {
     super.fromJSON(j, context);
@@ -2173,58 +2332,65 @@ class SelectionChange extends Change {
 
 UndoRedoManager.registerChange('SelectionChange', SelectionChange);
 
-/** Class representing a toggle selection visibility.
+/**
+ * Class representing a change of visibility state for selected items.
+ *
  * @extends Change
  */
-class ToggleSelectionVisibility extends Change {
+class SelectionVisibilityChange extends Change {
   /**
-   * Create a toggle selection visibilit.
-   * @param {any} selection - The selection value.
-   * @param {any} state - The state value.
+   * Create a toggle selection visibility.
+   *
+   * @param {Set} selection - The selection value.
+   * @param {boolean} state - The state value.
    */
   constructor(selection, state) {
     super('Selection Visibility Change');
     this.selection = selection;
     this.state = state;
-    this.do(this.state);
+    this._changeItemsVisibility(this.state);
   }
 
   /**
-   * The undo method.
+   * Restores previous visibility status of the selected items
    */
   undo() {
-    this.do(!this.state);
+    this._changeItemsVisibility(!this.state);
   }
 
   /**
-   * The redo method.
+   * Recreates previous visibility status of the selected items
    */
   redo() {
-    this.do(this.state);
+    this._changeItemsVisibility(this.state);
   }
 
   /**
-   * The do method.
-   * @param {any} state - The state param.
+   * Changes items visibility.
+   *
+   * @param {boolean} state - The state param.
+   * @private
    */
-  do(state) {
+  _changeItemsVisibility(state) {
     for (const treeItem of this.selection) {
       treeItem.getParameter('Visible').setValue(state);
     }
   }
 }
 
-UndoRedoManager.registerChange(
-  'ToggleSelectionVisibility',
-  ToggleSelectionVisibility
-);
+UndoRedoManager.registerChange('ToggleSelectionVisibility', SelectionVisibilityChange);
 
-/** Class representing a selection manager */
+/**
+ * Class representing a selection manager
+ *
+ * @extends {EventEmitter}
+ */
 class SelectionManager extends zeaEngine.EventEmitter {
   /**
-   * Create a selection manager.
-   * @param {object} options - The options object.
-   * @param {object} appData - The appData value.
+   * Creates an instance of SelectionManager.
+   *
+   * @param {object} appData - The options object.
+   * @param {object} [options={}] - The appData value.
    */
   constructor(appData, options = {}) {
     super();
@@ -2236,14 +2402,8 @@ class SelectionManager extends zeaEngine.EventEmitter {
       const size = 0.1;
       const thickness = size * 0.02;
       this.xfoHandle = new XfoHandle(size, thickness);
-      this.xfoHandle.setTargetParam(
-        this.selectionGroup.getParameter('GlobalXfo'),
-        false
-      );
+      this.xfoHandle.setTargetParam(this.selectionGroup.getParameter('GlobalXfo'), false);
       this.xfoHandle.setVisible(false);
-      // this.xfoHandle.showHandles('Translate')
-      // this.xfoHandle.showHandles('Rotate')
-      // this.xfoHandle.showHandles('Scale')
       this.selectionGroup.addChild(this.xfoHandle);
     }
 
@@ -2253,8 +2413,9 @@ class SelectionManager extends zeaEngine.EventEmitter {
   }
 
   /**
-   * The setRenderer method.
-   * @param {any} renderer - The renderer param.
+   * Adds specified the renderer to the `SelectionManager` and attaches the `SelectionGroup`.
+   *
+   * @param {GLBaseRenderer} renderer - The renderer param.
    */
   setRenderer(renderer) {
     if (this.__renderer == renderer) {
@@ -2266,8 +2427,11 @@ class SelectionManager extends zeaEngine.EventEmitter {
   }
 
   /**
-   * The setRenderer method.
-   * @param {any} renderer - The renderer param.
+   * Sets initial Xfo mode of the selection group.
+   *
+   * @see `Group` class documentation
+   *
+   * @param {number} mode - The Xfo mode
    */
   setXfoMode(mode) {
     if (this.xfoHandle) {
@@ -2276,25 +2440,26 @@ class SelectionManager extends zeaEngine.EventEmitter {
   }
 
   /**
-   * The setRenderer method.
-   * @param {any} renderer - The renderer param.
+   * Displays handles depending on the specified mode(Move, Rotate, Scale).
+   * If nothing is specified, it hides all of them.
+   *
+   * @param {number} handleManipulationMode - The mode of the Xfo parameter
    */
-  showHandles(mode) {
-    if (this.xfoHandle && this.currMode != mode) {
-      this.currMode = mode;
+  showHandles(handleManipulationMode) {
+    if (this.xfoHandle && this.currMode != handleManipulationMode) {
+      this.currMode = handleManipulationMode;
       // eslint-disable-next-line guard-for-in
       for (const key in this.handleGroup) {
-        this.handleGroup[key].emit(mode == key);
+        this.handleGroup[key].emit(handleManipulationMode == key);
       }
-      this.xfoHandle.showHandles(mode);
+      this.xfoHandle.showHandles(handleManipulationMode);
     }
   }
 
   /**
-   * updateHandleVisiblity determines of the Xfo Manipulation
-   * handle should be displayed or not.
+   * Determines if the Xfo Manipulation handle should be displayed or not.
    */
-  updateHandleVisiblity() {
+  updateHandleVisibility() {
     if (!this.xfoHandle) return
     const selection = this.selectionGroup.getItems();
     const visible = Array.from(selection).length > 0;
@@ -2303,16 +2468,19 @@ class SelectionManager extends zeaEngine.EventEmitter {
   }
 
   /**
-   * The getSelection method.
-   * @return {any} The return value.
+   * Returns an array with the selected items.
+   *
+   * @return {array} - The return value.
    */
   getSelection() {
     return this.selectionGroup.getItems()
   }
 
   /**
-   * The setSelection method.
-   * @param {any} newSelection - The newSelection param.
+   * Sets a new selection of items in the `SelectionManager`
+   *
+   * @param {Set} newSelection - The newSelection param
+   * @param {boolean} [createUndo=true] - The createUndo param
    */
   setSelection(newSelection, createUndo = true) {
     const selection = new Set(this.selectionGroup.getItems());
@@ -2333,19 +2501,21 @@ class SelectionManager extends zeaEngine.EventEmitter {
     this.selectionGroup.setItems(selection);
 
     // Deselecting can change the lead selected item.
-    if (selection.size > 0)
-      this.__setLeadSelection(selection.values().next().value);
+    if (selection.size > 0) this.__setLeadSelection(selection.values().next().value);
     else this.__setLeadSelection();
-    this.updateHandleVisiblity();
+    this.updateHandleVisibility();
 
     if (createUndo) {
       const change = new SelectionChange(this, prevSelection, selection);
-      if (this.appData.undoRedoManager)
-        this.appData.undoRedoManager.addChange(change);
+      if (this.appData.undoRedoManager) this.appData.undoRedoManager.addChange(change);
     }
   }
 
-  // eslint-disable-next-line require-jsdoc
+  /**
+   *
+   * @param {TreeItem} treeItem - The treeItem value
+   * @private
+   */
   __setLeadSelection(treeItem) {
     if (this.leadSelection != treeItem) {
       this.leadSelection = treeItem;
@@ -2355,7 +2525,8 @@ class SelectionManager extends zeaEngine.EventEmitter {
 
   /**
    * The toggleItemSelection method.
-   * @param {any} treeItem - The treeItem param.
+   *
+   * @param {TreeItem} treeItem - The treeItem param.
    * @param {boolean} replaceSelection - The replaceSelection param.
    */
   toggleItemSelection(treeItem, replaceSelection = true) {
@@ -2426,23 +2597,22 @@ class SelectionManager extends zeaEngine.EventEmitter {
       this.__setLeadSelection(treeItem);
     } else if (!sel) {
       // Deselecting can change the lead selected item.
-      if (selection.size === 1)
-        this.__setLeadSelection(selection.values().next().value);
+      if (selection.size === 1) this.__setLeadSelection(selection.values().next().value);
       else if (selection.size === 0) this.__setLeadSelection();
     }
 
     const change = new SelectionChange(this, prevSelection, selection);
-    if (this.appData.undoRedoManager)
-      this.appData.undoRedoManager.addChange(change);
+    if (this.appData.undoRedoManager) this.appData.undoRedoManager.addChange(change);
 
-    this.updateHandleVisiblity();
+    this.updateHandleVisibility();
     this.emit('selectionChanged', { prevSelection, selection });
   }
 
   /**
-   * The clearSelection method.
+   * Clears selection state by removing previous selected items and the Xfo handlers.
+   *
    * @param {boolean} newChange - The newChange param.
-   * @return {any} The return value.
+   * @return {boolean} - The return value.
    */
   clearSelection(newChange = true) {
     const selection = new Set(this.selectionGroup.getItems());
@@ -2456,19 +2626,19 @@ class SelectionManager extends zeaEngine.EventEmitter {
     // }
     selection.clear();
     this.selectionGroup.setItems(selection);
-    this.updateHandleVisiblity();
+    this.updateHandleVisibility();
     if (newChange) {
       const change = new SelectionChange(this, prevSelection, selection);
-      if (this.appData.undoRedoManager)
-        this.appData.undoRedoManager.addChange(change);
+      if (this.appData.undoRedoManager) this.appData.undoRedoManager.addChange(change);
       this.emit('selectionChanged', { selection, prevSelection });
     }
     return true
   }
 
   /**
-   * The selectItems method.
-   * @param {any} treeItems - The treeItems param.
+   * Selects the specified items replacing previous selection or concatenating new items to it.
+   *
+   * @param {array} treeItems - The treeItems param.
    * @param {boolean} replaceSelection - The replaceSelection param.
    */
   selectItems(treeItems, replaceSelection = true) {
@@ -2487,8 +2657,7 @@ class SelectionManager extends zeaEngine.EventEmitter {
 
     const change = new SelectionChange(this, prevSelection, selection);
 
-    if (this.appData.undoRedoManager)
-      this.appData.undoRedoManager.addChange(change);
+    if (this.appData.undoRedoManager) this.appData.undoRedoManager.addChange(change);
 
     this.selectionGroup.setItems(selection);
     if (selection.size === 1) {
@@ -2496,13 +2665,14 @@ class SelectionManager extends zeaEngine.EventEmitter {
     } else if (selection.size === 0) {
       this.__setLeadSelection();
     }
-    this.updateHandleVisiblity();
+    this.updateHandleVisibility();
     this.emit('selectionChanged', { prevSelection, selection });
   }
 
   /**
-   * The deselectItems method.
-   * @param {any} treeItems - The treeItems param.
+   * Deselects the specified items from the selection group.
+   *
+   * @param {array} treeItems - The treeItems param.
    */
   deselectItems(treeItems) {
     const selection = this.selectionGroup.getItems();
@@ -2524,40 +2694,37 @@ class SelectionManager extends zeaEngine.EventEmitter {
     this.selectionGroup.setItems(selection);
     const change = new SelectionChange(this, prevSelection, selection);
 
-    if (this.appData.undoRedoManager)
-      this.appData.undoRedoManager.addChange(change);
+    if (this.appData.undoRedoManager) this.appData.undoRedoManager.addChange(change);
 
     if (selection.size === 1) {
       this.__setLeadSelection(selection.values().next().value);
     } else if (selection.size === 0) {
       this.__setLeadSelection();
     }
-    this.updateHandleVisiblity();
+    this.updateHandleVisibility();
     this.emit('selectionChanged', { prevSelection, selection });
   }
 
   /**
-   * The toggleSelectionVisiblity method.
+   * Toggles selection visibility, if the visibility is `true`then sets it to `false` and vice versa.
    */
-  toggleSelectionVisiblity() {
+  toggleSelectionVisibility() {
     if (this.leadSelection) {
       const selection = this.selectionGroup.getItems();
       const state = !this.leadSelection.getVisible();
-      const change = new ToggleSelectionVisibility(selection, state);
-      if (this.appData.undoRedoManager)
-        this.appData.undoRedoManager.addChange(change);
+      const change = new SelectionVisibilityChange(selection, state);
+      if (this.appData.undoRedoManager) this.appData.undoRedoManager.addChange(change);
     }
   }
 
   // ////////////////////////////////////
-  //
-
   /**
    * The startPickingMode method.
-   * @param {any} label - The label param.
-   * @param {any} fn - The fn param.
-   * @param {any} filterFn - The filterFn param.
-   * @param {any} count - The count param.
+   *
+   * @param {string} label - The label param.
+   * @param {function} fn - The fn param.
+   * @param {function} filterFn - The filterFn param.
+   * @param {number} count - The count param.
    */
   startPickingMode(label, fn, filterFn, count) {
     // Display this in a status bar.
@@ -2570,7 +2737,8 @@ class SelectionManager extends zeaEngine.EventEmitter {
 
   /**
    * The pickingFilter method.
-   * @param {any} item - The item param.
+   *
+   * @param {TreeItem} item - The item param.
    * @return {any} The return value.
    */
   pickingFilter(item) {
@@ -2579,7 +2747,8 @@ class SelectionManager extends zeaEngine.EventEmitter {
 
   /**
    * The pickingModeActive method.
-   * @return {any} The return value.
+   *
+   * @return {boolean} The return value.
    */
   pickingModeActive() {
     return this.__pickCB != undefined
@@ -2594,13 +2763,12 @@ class SelectionManager extends zeaEngine.EventEmitter {
 
   /**
    * The pick method.
-   * @param {any} item - The item param.
+   * @param {TreeItem} item - The item param.
    */
   pick(item) {
     if (this.__pickCB) {
       if (Array.isArray(item)) {
-        if (this.__pickFilter)
-          this.__picked = this.__picked.concat(item.filter(this.__pickFilter));
+        if (this.__pickFilter) this.__picked = this.__picked.concat(item.filter(this.__pickFilter));
         else this.__picked = this.__picked.concat(item);
       } else {
         if (this.__pickFilter && !this.__pickFilter(item)) return
@@ -2615,14 +2783,17 @@ class SelectionManager extends zeaEngine.EventEmitter {
 }
 
 /**
- * Class representing a treeItemeter value change.
+ * Class representing an `Add TreeItem` Change. Meaning that this should be called when you add a new `TreeItem` to the scene.
+ *
  * @extends Change
  */
 class TreeItemAddChange extends Change {
   /**
-   * Create a TreeItemAddChange.
-   * @treeItem {any} treeItem - The treeItem value.
-   * @treeItem {any} newValue - The newValue value.
+   * Creates an instance of TreeItemAddChange.
+   *
+   * @param {TreeItem} treeItem -
+   * @param {TreeItem} owner -
+   * @param {SelectionManager} selectionManager -
    */
   constructor(treeItem, owner, selectionManager) {
     if (treeItem) {
@@ -2641,7 +2812,7 @@ class TreeItemAddChange extends Change {
   }
 
   /**
-   * The undo method.
+   * Removes the newly added TreeItem from its owner.
    */
   undo() {
     if (this.treeItem instanceof zeaEngine.Operator) {
@@ -2656,12 +2827,11 @@ class TreeItemAddChange extends Change {
       }, false);
     }
     this.owner.removeChild(this.treeItemIndex);
-    if (this.selectionManager)
-      this.selectionManager.setSelection(this.prevSelection, false);
+    if (this.selectionManager) this.selectionManager.setSelection(this.prevSelection, false);
   }
 
   /**
-   * The redo method.
+   * Restores undone `TreeItem`.
    */
   redo() {
     // Now re-attach all the detached operators.
@@ -2677,14 +2847,14 @@ class TreeItemAddChange extends Change {
       }, false);
     }
     this.owner.addChild(this.treeItem);
-    if (this.selectionManager)
-      this.selectionManager.setSelection(new Set([this.treeItem]), false);
+    if (this.selectionManager) this.selectionManager.setSelection(new Set([this.treeItem]), false);
   }
 
   /**
-   * The toJSON method.
-   * @treeItem {any} context - The context treeItem.
-   * @return {any} The return value.
+   * Serializes `TreeItem` like instanced class into a JSON object.
+   *
+   * @param {object} context - The context treeItem
+   * @return {object} - JSON object
    */
   toJSON(context) {
     const j = {
@@ -2697,14 +2867,15 @@ class TreeItemAddChange extends Change {
   }
 
   /**
-   * The fromJSON method.
-   * @treeItem {any} j - The j treeItem.
-   * @treeItem {any} context - The context treeItem.
+   * Reconstructs `TreeItem` like parameter from JSON object.
+   *
+   * @param {object} j -The j treeItem
+   * @param {object} context - The context treeItem
    */
   fromJSON(j, context) {
-    const treeItem = zeaEngine.sgFactory.constructClass(j.treeItem.type);
+    const treeItem = zeaEngine.Registry.constructClass(j.treeItem.type);
     if (!treeItem) {
-      console.warn('resolvePath is unable to conostruct', j.treeItem);
+      console.warn('resolvePath is unable to construct', j.treeItem);
       return
     }
     this.name = j.name;
@@ -2715,6 +2886,9 @@ class TreeItemAddChange extends Change {
     this.treeItemIndex = this.owner.addChild(this.treeItem, false, false);
   }
 
+  /**
+   * Removes reference of the `TreeItem` from current change.
+   */
   destroy() {
     this.treeItem.removeRef(this);
   }
@@ -2723,179 +2897,21 @@ class TreeItemAddChange extends Change {
 UndoRedoManager.registerChange('TreeItemAddChange', TreeItemAddChange);
 
 /**
- * Class representing a treeItemeter value change.
- * @extends Change
- */
-class TreeItemsRemoveChange extends Change {
-  /**
-   * Create a TreeItemsRemoveChange.
-   * @treeItem {any} treeItem - The treeItem value.
-   * @treeItem {any} newValue - The newValue value.
-   */
-  constructor(items, appData) {
-    super();
-    this.items = [];
-    this.itemOwners = [];
-    this.itemPaths = [];
-    this.itemIndices = [];
-    if (items) {
-      this.selectionManager = appData.selectionManager;
-      this.prevSelection = new Set(this.selectionManager.getSelection());
-      this.items = items;
-      this.newSelection = new Set(this.prevSelection);
-
-      const itemNames = [];
-      this.items.forEach((item) => {
-        const owner = item.getOwner();
-        const itemIndex = owner.getChildIndex(item);
-        itemNames.push(item.getName());
-        item.addRef(this);
-        this.itemOwners.push(owner);
-        this.itemPaths.push(item.getPath());
-        this.itemIndices.push(itemIndex);
-
-        if (this.selectionManager && this.newSelection.has(item))
-          this.newSelection.delete(item);
-        if (item instanceof zeaEngine.Operator) {
-          const op = item;
-          op.detach();
-        } else if (item instanceof zeaEngine.TreeItem) {
-          item.traverse((subTreeItem) => {
-            if (subTreeItem instanceof zeaEngine.Operator) {
-              const op = subTreeItem;
-              op.detach();
-            }
-            if (this.selectionManager && this.newSelection.has(subTreeItem))
-              this.newSelection.delete(subTreeItem);
-          }, false);
-        }
-
-        owner.removeChild(itemIndex);
-      });
-      this.selectionManager.setSelection(this.newSelection, false);
-
-      this.name = itemNames + ' Deleted';
-    }
-  }
-
-  /**
-   * The undo method.
-   */
-  undo() {
-    this.items.forEach((item, index) => {
-      this.itemOwners[index].insertChild(
-        item,
-        this.itemIndices[index],
-        false,
-        false
-      );
-
-      // Now re-attach all the detached operators.
-      if (item instanceof zeaEngine.Operator) {
-        const op = item;
-        op.reattach();
-      } else if (subTreeItem instanceof zeaEngine.TreeItem) {
-        item.traverse((subTreeItem) => {
-          if (subTreeItem instanceof zeaEngine.Operator) {
-            const op = subTreeItem;
-            op.reattach();
-          }
-        }, false);
-      }
-    });
-    if (this.selectionManager)
-      this.selectionManager.setSelection(this.prevSelection, false);
-  }
-
-  /**
-   * The redo method.
-   */
-  redo() {
-    if (this.selectionManager)
-      this.selectionManager.setSelection(this.newSelection, false);
-
-    // Now re-detach all the operators.
-    this.items.forEach((item, index) => {
-      this.itemOwners[index].removeChild(this.itemIndices[index]);
-
-      if (item instanceof zeaEngine.Operator) {
-        const op = item;
-        op.detach();
-      } else if (subTreeItem instanceof zeaEngine.TreeItem) {
-        item.traverse((subTreeItem) => {
-          if (subTreeItem instanceof zeaEngine.Operator) {
-            const op = subTreeItem;
-            op.detach();
-          }
-        }, false);
-      }
-    });
-  }
-
-  /**
-   * The toJSON method.
-   * @treeItem {any} appData - The appData treeItem.
-   * @return {any} The return value.
-   */
-  toJSON(appData) {
-    const j = {
-      name: this.name,
-      items: [],
-      itemPaths: this.itemPaths,
-      itemIndices: this.itemIndices,
-    };
-    this.items.forEach((item) => {
-      j.items.push(item.toJSON());
-    });
-    return j
-  }
-
-  /**
-   * The fromJSON method.
-   * @treeItem {any} j - The j treeItem.
-   * @treeItem {any} appData - The appData treeItem.
-   */
-  fromJSON(j, appData) {
-    this.name = j.name;
-    j.itemPaths.forEach((itemPath) => {
-      const item = appData.scene.getRoot().resolvePath(itemPath, 1);
-      if (!item) {
-        console.warn('resolvePath is unable to resolve', itemPath);
-        return
-      }
-      const owner = item.getOwner();
-      this.itemOwners.push(owner);
-      this.itemPaths.push(item.getPath());
-      this.itemIndices.push(owner.getChildIndex(item));
-    });
-  }
-
-  /**
-   * The destroy method cleans up any data requiring manual cleanup.
-   * Deleted items still on the undo stack are then flushed and any
-   * GPU resoruces cleaned up.
-   */
-  destroy() {
-    this.items.forEach((item) => item.removeRef(this));
-  }
-}
-
-UndoRedoManager.registerChange('TreeItemsRemoveChange', TreeItemsRemoveChange);
-
-/**
- * Class representing a treeItemeter value change.
+ * Class representing a `Move TreeItem` Change(Moving a TreeItem from one parent to another).
+ *
  * @extends Change
  */
 class TreeItemMoveChange extends Change {
   /**
-   * Create a TreeItemMoveChange.
-   * @treeItem {any} treeItem - The treeItem value.
-   * @treeItem {any} newOwner - The newOwner value.
+   * Creates an instance of TreeItemMoveChange.
+   *
+   * @param {TreeItem} treeItem - The item to move.
+   * @param {TreeItem} newOwner - The new owner item.
+   * @memberof TreeItemMoveChange
    */
   constructor(treeItem, newOwner) {
     if (treeItem) {
-      console.log('TreeItemMoveChange');
-      super(treeItem.getName() + ' Added');
+      super(treeItem.getName() + ' Moved');
       this.treeItem = treeItem;
       this.oldOwner = this.treeItem.getOwner();
       this.oldOwnerIndex = this.oldOwner.getChildIndex(this.treeItem);
@@ -2907,23 +2923,24 @@ class TreeItemMoveChange extends Change {
   }
 
   /**
-   * The undo method.
+   * Inserts back the moved TreeItem in the old owner item(Rollbacks the move action).
    */
   undo() {
     this.oldOwner.insertChild(this.treeItem, this.oldOwnerIndex, true);
   }
 
   /**
-   * The redo method.
+   * Executes the move action inserting the TreeItem back to the new owner item.
    */
   redo() {
     this.newOwner.addChild(this.treeItem, true);
   }
 
   /**
-   * The toJSON method.
-   * @treeItem {any} context - The context treeItem.
-   * @return {any} The return value.
+   * Returns a JSON object with the specifications of the change(Typically used for replication).
+   *
+   * @param {object} context - The context value
+   * @return {object} - JSON object of the change
    */
   toJSON(context) {
     const j = {
@@ -2931,13 +2948,15 @@ class TreeItemMoveChange extends Change {
       treeItemPath: this.treeItem.getPath(),
       newOwnerPath: this.newOwner.getPath(),
     };
+
     return j
   }
 
   /**
-   * The fromJSON method.
-   * @treeItem {any} j - The j treeItem.
-   * @treeItem {any} context - The context treeItem.
+   * Restores the Change state from the specified JSON object.
+   *
+   * @param {object} j - The serialized object with the change data.
+   * @param {object} context - The context value
    */
   fromJSON(j, context) {
     const treeItem = appData.scene.getRoot().resolvePath(j.treeItemPath, 1);
@@ -2962,11 +2981,172 @@ class TreeItemMoveChange extends Change {
 
 UndoRedoManager.registerChange('TreeItemMoveChange', TreeItemMoveChange);
 
-/** Class representing a tool manager. */
+/**
+ * Class representing a TreeItems removal Change,
+ * taking into account that it would remove all the specified items ti their children
+ *
+ * @extends Change
+ */
+class TreeItemsRemoveChange extends Change {
+  /**
+   * Creates an instance of TreeItemsRemoveChange.
+   *
+   * @param {array} items - List of TreeItems
+   * @param {object} appData - The appData value
+   */
+  constructor(items, appData) {
+    super();
+    this.items = [];
+    this.itemOwners = [];
+    this.itemPaths = [];
+    this.itemIndices = [];
+    if (items) {
+      this.selectionManager = appData.selectionManager;
+      this.prevSelection = new Set(this.selectionManager.getSelection());
+      this.items = items;
+      this.newSelection = new Set(this.prevSelection);
+
+      const itemNames = [];
+      this.items.forEach((item) => {
+        const owner = item.getOwner();
+        const itemIndex = owner.getChildIndex(item);
+        itemNames.push(item.getName());
+        item.addRef(this);
+        this.itemOwners.push(owner);
+        this.itemPaths.push(item.getPath());
+        this.itemIndices.push(itemIndex);
+
+        if (this.selectionManager && this.newSelection.has(item)) this.newSelection.delete(item);
+        if (item instanceof zeaEngine.Operator) {
+          const op = item;
+          op.detach();
+        } else if (item instanceof zeaEngine.TreeItem) {
+          item.traverse((subTreeItem) => {
+            if (subTreeItem instanceof zeaEngine.Operator) {
+              const op = subTreeItem;
+              op.detach();
+            }
+            if (this.selectionManager && this.newSelection.has(subTreeItem)) this.newSelection.delete(subTreeItem);
+          }, false);
+        }
+
+        owner.removeChild(itemIndex);
+      });
+      this.selectionManager.setSelection(this.newSelection, false);
+
+      this.name = itemNames + ' Deleted';
+    }
+  }
+
+  /**
+   * Restores all items removed in the change, reattaching them to their old owners.
+   */
+  undo() {
+    this.items.forEach((item, index) => {
+      this.itemOwners[index].insertChild(item, this.itemIndices[index], false, false);
+
+      // Now re-attach all the detached operators.
+      if (item instanceof zeaEngine.Operator) {
+        const op = item;
+        op.reattach();
+      } else if (subTreeItem instanceof zeaEngine.TreeItem) {
+        item.traverse((subTreeItem) => {
+          if (subTreeItem instanceof zeaEngine.Operator) {
+            const op = subTreeItem;
+            op.reattach();
+          }
+        }, false);
+      }
+    });
+    if (this.selectionManager) this.selectionManager.setSelection(this.prevSelection, false);
+  }
+
+  /**
+   * Executes initial change to remove items from their owners.
+   */
+  redo() {
+    if (this.selectionManager) this.selectionManager.setSelection(this.newSelection, false);
+
+    // Now re-detach all the operators.
+    this.items.forEach((item, index) => {
+      this.itemOwners[index].removeChild(this.itemIndices[index]);
+
+      if (item instanceof zeaEngine.Operator) {
+        const op = item;
+        op.detach();
+      } else if (subTreeItem instanceof zeaEngine.TreeItem) {
+        item.traverse((subTreeItem) => {
+          if (subTreeItem instanceof zeaEngine.Operator) {
+            const op = subTreeItem;
+            op.detach();
+          }
+        }, false);
+      }
+    });
+  }
+
+  /**
+   * Serializes current change data as a JSON object, so this action can be stored/replicated somewhere else.
+   *
+   * @param {object} appData - The appData value
+   * @return {object} - JSON Object representation of current change
+   * @memberof TreeItemsRemoveChange
+   */
+  toJSON(appData) {
+    const j = {
+      name: this.name,
+      items: [],
+      itemPaths: this.itemPaths,
+      itemIndices: this.itemIndices,
+    };
+    this.items.forEach((item) => {
+      j.items.push(item.toJSON());
+    });
+    return j
+  }
+
+  /**
+   * Restores Change action from a JSON object.
+   *
+   * @param {object} j - The JSON object with Change data.
+   * @param {object} appData - The appData value
+   * @memberof TreeItemsRemoveChange
+   */
+  fromJSON(j, appData) {
+    this.name = j.name;
+    j.itemPaths.forEach((itemPath) => {
+      const item = appData.scene.getRoot().resolvePath(itemPath, 1);
+      if (!item) {
+        console.warn('resolvePath is unable to resolve', itemPath);
+        return
+      }
+      const owner = item.getOwner();
+      this.itemOwners.push(owner);
+      this.itemPaths.push(item.getPath());
+      this.itemIndices.push(owner.getChildIndex(item));
+    });
+  }
+
+  /**
+   * The destroy method cleans up any data requiring manual cleanup.
+   * Deleted items still on the undo stack are then flushed and any
+   * GPU resources cleaned up.
+   */
+  destroy() {
+    this.items.forEach((item) => item.removeRef(this));
+  }
+}
+
+UndoRedoManager.registerChange('TreeItemsRemoveChange', TreeItemsRemoveChange);
+
+/**
+ * Class representing a tool manager.
+ */
 class ToolManager extends zeaEngine.EventEmitter {
   /**
-   * Create a tool manager.
-   * @param {any} appData - The appData value.
+   * Creates an instance of ToolManager.
+   *
+   * @param {object} appData - The appData value.
    */
   constructor(appData) {
     super();
@@ -2979,8 +3159,9 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The insertTool method.
-   * @param {any} tool - The tool param.
-   * @param {any} index - The index param.
+   *
+   * @param {BaseTool} tool - The tool param.
+   * @param {number} index - The index param.
    */
   insertTool(tool, index) {
     this.__toolStack.splice(index, 0, tool);
@@ -2989,9 +3170,10 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The insertToolBefore method.
-   * @param {any} tool - The tool param.
-   * @param {any} beforeTool - The beforeTool param.
-   * @return {any} The return value.
+   *
+   * @param {BaseTool} tool - The tool param.
+   * @param {BaseTool} beforeTool - The beforeTool param.
+   * @return {number} The return value.
    */
   insertToolBefore(tool, beforeTool) {
     // Note: when activating new tools in VR, we
@@ -3006,9 +3188,10 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The insertToolAfter method.
-   * @param {any} tool - The tool param.
-   * @param {any} afterTool - The afterTool param.
-   * @return {any} The return value.
+   *
+   * @param {BaseTool} tool - The tool param.
+   * @param {BaseTool} afterTool - The afterTool param.
+   * @return {number} The return value.
    */
   insertToolAfter(tool, afterTool) {
     const index = this.__toolStack.indexOf(afterTool) + 1;
@@ -3022,8 +3205,9 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The getToolIndex method.
-   * @param {any} tool - The tool param.
-   * @return {any} The return value.
+   *
+   * @param {BaseTool} tool - The tool param.
+   * @return {number} The return value.
    */
   getToolIndex(tool) {
     return this.__toolStack.indexOf(tool)
@@ -3031,7 +3215,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The removeTool method.
-   * @param {any} index - The index param.
+   *
+   * @param {number} index - The index param.
    */
   removeTool(index) {
     const tool = this.__toolStack[index];
@@ -3047,7 +3232,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The removeToolByHandle method.
-   * @param {any} tool - The tool param.
+   *
+   * @param {BaseTool} tool - The tool param.
    */
   removeToolByHandle(tool) {
     this.removeTool(this.getToolIndex(tool));
@@ -3055,8 +3241,9 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The pushTool method.
-   * @param {any} tool - The tool param.
-   * @return {any} The return value.
+   *
+   * @param {BaseTool} tool - The tool param.
+   * @return {number} The return value.
    */
   pushTool(tool) {
     const prevTool = this.currTool();
@@ -3081,7 +3268,10 @@ class ToolManager extends zeaEngine.EventEmitter {
     return this.__toolStack.length - 1
   }
 
-  // eslint-disable-next-line require-jsdoc
+  /**
+   *
+   * @private
+   */
   __removeCurrTool() {
     if (this.__toolStack.length > 0) {
       const prevTool = this.__toolStack.pop();
@@ -3102,7 +3292,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The replaceCurrentTool method.
-   * @param {any} tool - The tool param.
+   *
+   * @param {BaseTool} tool - The tool param.
    */
   replaceCurrentTool(tool) {
     this.__removeCurrTool();
@@ -3113,7 +3304,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The currTool method.
-   * @return {any} The return value.
+   *
+   * @return {BaseTool} The return value.
    */
   currTool() {
     return this.__toolStack[this.__toolStack.length - 1]
@@ -3121,7 +3313,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The currToolName method.
-   * @return {any} The return value.
+   *
+   * @return {string} The return value.
    */
   currToolName() {
     return this.__toolStack[this.__toolStack.length - 1].getName()
@@ -3129,7 +3322,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The bind method.
-   * @param {any} renderer - The renderer param.
+   *
+   * @param {GLBaseRenderer} renderer - The renderer param.
    */
   bind(renderer) {
     const viewport = renderer.getViewport();
@@ -3138,10 +3332,7 @@ class ToolManager extends zeaEngine.EventEmitter {
     this.mouseMoveId = viewport.on('mouseMove', this.onMouseMove.bind(this));
     this.mouseUpId = viewport.on('mouseUp', this.onMouseUp.bind(this));
     this.mouseLeaveId = viewport.on('mouseLeave', this.onMouseLeave.bind(this));
-    this.mouseDoubleClickedId = viewport.on(
-      'mouseDoubleClicked',
-      this.onDoubleClick.bind(this)
-    );
+    this.mouseDoubleClickedId = viewport.on('mouseDoubleClicked', this.onDoubleClick.bind(this));
     this.mouseWheelId = viewport.on('mouseWheel', this.onWheel.bind(this));
 
     // ///////////////////////////////////
@@ -3155,40 +3346,23 @@ class ToolManager extends zeaEngine.EventEmitter {
     this.touchStartId = viewport.on('touchStart', this.onTouchStart.bind(this));
     this.touchMoveId = viewport.on('touchMove', this.onTouchMove.bind(this));
     this.touchEndId = viewport.on('touchEnd', this.onTouchEnd.bind(this));
-    this.touchCancelId = viewport.on(
-      'touchCancel',
-      this.onTouchCancel.bind(this)
-    );
-    this.doubleTappedId = viewport.on(
-      'doubleTapped',
-      this.onDoubleTap.bind(this)
-    );
+    this.touchCancelId = viewport.on('touchCancel', this.onTouchCancel.bind(this));
+    this.doubleTappedId = viewport.on('doubleTapped', this.onDoubleTap.bind(this));
 
     this.appData.renderer.getXRViewport().then((xrvp) => {
       // ///////////////////////////////////
       // VRController events
-      this.controllerDownId = xrvp.on(
-        'controllerButtonDown',
-        this.onVRControllerButtonDown.bind(this)
-      );
-      this.controllerUpId = xrvp.on(
-        'controllerButtonUp',
-        this.onVRControllerButtonUp.bind(this)
-      );
-      this.controllerDoubleClickId = xrvp.on(
-        'controllerDoubleClicked',
-        this.onVRControllerDoubleClicked.bind(this)
-      );
-      this.onVRPoseChangedId = xrvp.on(
-        'viewChanged',
-        this.onVRPoseChanged.bind(this)
-      );
+      this.controllerDownId = xrvp.on('controllerButtonDown', this.onVRControllerButtonDown.bind(this));
+      this.controllerUpId = xrvp.on('controllerButtonUp', this.onVRControllerButtonUp.bind(this));
+      this.controllerDoubleClickId = xrvp.on('controllerDoubleClicked', this.onVRControllerDoubleClicked.bind(this));
+      this.onVRPoseChangedId = xrvp.on('viewChanged', this.onVRPoseChanged.bind(this));
     });
   }
 
   /**
    * The onMouseDown method.
-   * @param {any} event - The event param.
+   *
+   * @param {MouseEvent} event - The event param.
    */
   onMouseDown(event) {
     event.undoRedoManager = this.appData.undoRedoManager;
@@ -3216,7 +3390,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The onMouseMove method.
-   * @param {any} event - The event param.
+   *
+   * @param {MouseEvent} event - The event param.
    */
   onMouseMove(event) {
     event.undoRedoManager = this.appData.undoRedoManager;
@@ -3237,7 +3412,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The onMouseUp method.
-   * @param {any} event - The event param.
+   *
+   * @param {MouseEvent} event - The event param.
    */
   onMouseUp(event) {
     event.undoRedoManager = this.appData.undoRedoManager;
@@ -3260,7 +3436,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The onMouseLeave method.
-   * @param {any} event - The event param.
+   *
+   * @param {MouseEvent} event - The event param.
    */
   onMouseLeave(event) {
     let i = this.__toolStack.length;
@@ -3276,7 +3453,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The onDoubleClick method.
-   * @param {any} event - The event param.
+   *
+   * @param {MouseEvent} event - The event param.
    */
   onDoubleClick(event) {
     let i = this.__toolStack.length;
@@ -3288,7 +3466,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The onWheel method.
-   * @param {any} event - The event param.
+   *
+   * @param {MouseEvent} event - The event param.
    */
   onWheel(event) {
     event.undoRedoManager = this.appData.undoRedoManager;
@@ -3304,8 +3483,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The onKeyPressed method.
-   * @param {any} key - The event param.
-   * @param {any} event - The event param.
+   *
+   * @param {KeyboardEvent} event - The event param.
    */
   onKeyPressed(event) {
     event.undoRedoManager = this.appData.undoRedoManager;
@@ -3318,8 +3497,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The onKeyDown method.
-   * @param {any} key - The event param.
-   * @param {any} event - The event param.
+   *
+   * @param {KeyboardEvent} event - The event param.
    */
   onKeyDown(event) {
     event.undoRedoManager = this.appData.undoRedoManager;
@@ -3332,8 +3511,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The onKeyUp method.
-   * @param {any} key - The event param.
-   * @param {any} event - The event param.
+   *
+   * @param {KeyboardEvent} event - The event param.
    */
   onKeyUp(event) {
     event.undoRedoManager = this.appData.undoRedoManager;
@@ -3349,7 +3528,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The onTouchStart method.
-   * @param {any} event - The event param.
+   *
+   * @param {TouchEvent} event - The event param.
    */
   onTouchStart(event) {
     event.undoRedoManager = this.appData.undoRedoManager;
@@ -3362,7 +3542,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The onTouchMove method.
-   * @param {any} event - The event param.
+   *
+   * @param {TouchEvent} event - The event param.
    */
   onTouchMove(event) {
     event.undoRedoManager = this.appData.undoRedoManager;
@@ -3375,7 +3556,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The onTouchEnd method.
-   * @param {any} event - The event param.
+   *
+   * @param {TouchEvent} event - The event param.
    */
   onTouchEnd(event) {
     event.undoRedoManager = this.appData.undoRedoManager;
@@ -3388,7 +3570,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The onTouchCancel method.
-   * @param {any} event - The event param.
+   *
+   * @param {TouchEvent} event - The event param.
    */
   onTouchCancel(event) {
     event.undoRedoManager = this.appData.undoRedoManager;
@@ -3401,7 +3584,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The onDoubleTap method.
-   * @param {any} event - The event param.
+   *
+   * @param {TouchEvent} event - The event param.
    */
   onDoubleTap(event) {
     event.undoRedoManager = this.appData.undoRedoManager;
@@ -3417,7 +3601,7 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The __prepareEvent method.
-   * @param {any} event - The event that occurs.
+   * @param {object} event - The event that occurs.
    * @private
    */
   __prepareEvent(event) {
@@ -3430,7 +3614,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The onVRControllerButtonDown method.
-   * @param {any} event - The event param.
+   *
+   * @param {object} event - The event param.
    */
   onVRControllerButtonDown(event) {
     this.__prepareEvent(event);
@@ -3444,7 +3629,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The onVRControllerButtonUp method.
-   * @param {any} event - The event param.
+   *
+   * @param {object} event - The event param.
    */
   onVRControllerButtonUp(event) {
     this.__prepareEvent(event);
@@ -3458,7 +3644,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The onVRControllerDoubleClicked method.
-   * @param {any} event - The event param.
+   *
+   * @param {object} event - The event param.
    */
   onVRControllerDoubleClicked(event) {
     this.__prepareEvent(event);
@@ -3472,7 +3659,8 @@ class ToolManager extends zeaEngine.EventEmitter {
 
   /**
    * The onVRPoseChanged method.
-   * @param {any} event - The event param.
+   *
+   * @param {object} event - The event param.
    */
   onVRPoseChanged(event) {
     this.__prepareEvent(event);
@@ -3520,13 +3708,19 @@ class ToolManager extends zeaEngine.EventEmitter {
 }
 
 /**
- * Class representing a base tool.
+ * Abstract class representing a tool with methods representing mouse, keyboard, touch and VR events.
+ *
+ * **Events**
+ * * **installChanged:** Triggered when the tool is installed or uninstalled.
+ * * **activatedChanged:** Triggered when a tool is activated or deactivated.
+ *
  * @extends ParameterOwner
  */
 class BaseTool extends zeaEngine.ParameterOwner {
   /**
-   * Create a base tool.
-   * @param {any} appData - The appData value.
+   * Creates an instance of BaseTool.
+   *
+   * @param {object} appData - The appData value.
    */
   constructor(appData) {
     super();
@@ -3539,16 +3733,18 @@ class BaseTool extends zeaEngine.ParameterOwner {
   }
 
   /**
-   * The getName method.
-   * @return {any} The return value.
+   * Returns the name of the tool class.
+   *
+   * @return {string} The return value.
    */
   getName() {
     return this.constructor.name
   }
 
   /**
-   * The isPrimaryTool method.
-   * @return {any} The return value.
+   * Checks if the tool is a primary tool or not.
+   *
+   * @return {boolean} - The return value.
    */
   isPrimaryTool() {
     return false
@@ -3558,16 +3754,18 @@ class BaseTool extends zeaEngine.ParameterOwner {
   // Tools on the tool stack.
 
   /**
-   * The installed method.
-   * @return {any} The return value.
+   * Checks whether the tool is already installed or not.
+   *
+   * @return {boolean} The return value.
    */
   installed() {
     return this.__installed
   }
 
   /**
-   * The install method.
-   * @param {any} index - The index param.
+   * Installs the tool.
+   *
+   * @param {number} index - The index param.
    */
   install(index) {
     if (this.__installed) throw new Error('Tool already installed')
@@ -3577,7 +3775,7 @@ class BaseTool extends zeaEngine.ParameterOwner {
   }
 
   /**
-   * The uninstall method.
+   * Uninstalls tool.
    */
   uninstall() {
     this.__installed = false;
@@ -3585,7 +3783,7 @@ class BaseTool extends zeaEngine.ParameterOwner {
   }
 
   /**
-   * The activateTool method.
+   * Enables tools usage.
    */
   activateTool() {
     if (this.__activated) throw new Error('Tool already activate')
@@ -3594,7 +3792,7 @@ class BaseTool extends zeaEngine.ParameterOwner {
   }
 
   /**
-   * The deactivateTool method.
+   * Disables tool usage.
    */
   deactivateTool() {
     this.__activated = false;
@@ -3605,118 +3803,166 @@ class BaseTool extends zeaEngine.ParameterOwner {
   // Mouse events
 
   /**
-   * The onMouseDown method.
-   * @param {any} event - The event param.
+   * Event fired when a pointing device button is pressed while the pointer is over the tool.
+   *
+   * @param {MouseEvent} event - The event param.
    */
-  onMouseDown(event) {}
+  onMouseDown(event) {
+    // console.warn('Implement me')
+  }
 
   /**
-   * The onMouseMove method.
-   * @param {any} event - The event param.
+   * Event fired when a pointing device is moved while the cursor's hotspot is inside it.
+   *
+   * @param {MouseEvent} event - The event param.
    */
-  onMouseMove(event) {}
+  onMouseMove(event) {
+    // console.warn('Implement me')
+  }
 
   /**
-   * The onMouseUp method.
-   * @param {any} event - The event param.
+   * Event fired when a pointing device button is released while the pointer is over the tool.
+   *
+   * @param {MouseEvent} event - The event param.
    */
-  onMouseUp(event) {}
+  onMouseUp(event) {
+    // console.warn('Implement me')
+  }
 
   /**
-   * The onDoubleClick method.
-   * @param {any} event - The event param.
+   * Event fired when a pointing device button is double clicked on the tool.
+   *
+   * @param {MouseEvent} event - The event param.
    */
-  onDoubleClick(event) {}
+  onDoubleClick(event) {
+    // console.warn('Implement me')
+  }
 
   /**
-   * The onWheel method.
-   * @param {any} event - The event param.
+   * Event fired when the user rotates the pointing device wheel.
+   *
+   * @param {MouseEvent} event - The event param.
    */
-  onWheel(event) {}
+  onWheel(event) {
+    // console.warn('Implement me')
+  }
 
   // ///////////////////////////////////
   // Keyboard events
 
   /**
-   * The onKeyPressed method.
-   * @param {any} key - The key param.
-   * @param {any} event - The event param.
+   * Event fired when the user presses a key on the keyboard.
+   *
+   * @param {KeyboardEvent} event - The event param.
    */
-  onKeyPressed(event) {}
+  onKeyPressed(event) {
+    // console.warn('Implement me')
+  }
 
   /**
-   * The onKeyDown method.
-   * @param {any} key - The key param.
-   * @param {any} event - The event param.
+   * Event fired when the user presses down a key on the keyboard.
+   *
+   * @param {KeyboardEvent} event - The event param.
    */
-  onKeyDown(event) {}
+  onKeyDown(event) {
+    // console.warn('Implement me')
+  }
 
   /**
-   * The onKeyUp method.
-   * @param {any} key - The key param.
-   * @param {any} event - The event param.
+   * Event fired when the user releases a key on the keyboard.
+   *
+   * @param {KeyboardEvent} event - The event param.
    */
-  onKeyUp(event) {}
+  onKeyUp(event) {
+    // console.warn('Implement me')
+  }
 
   // ///////////////////////////////////
   // Touch events
 
   /**
-   * The onTouchStart method.
-   * @param {any} event - The event param.
+   * Event fired when one or more touch points are placed on the touch surface over a tool.
+   *
+   * @param {TouchEvent} event - The event param.
    */
-  onTouchStart(event) {}
+  onTouchStart(event) {
+    // console.warn('Implement me')
+  }
 
   /**
-   * The onTouchMove method.
-   * @param {any} event - The event param.
+   * Event fired when the one or more touch points are moved along the touch surface over a tool.
+   *
+   * @param {TouchEvent} event - The event param.
    */
-  onTouchMove(event) {}
+  onTouchMove(event) {
+    // console.warn('Implement me')
+  }
 
   /**
-   * The onTouchEnd method.
-   * @param {any} event - The event param.
+   * Event fired when one or more touch points are removed from the touch surface over a tool.
+   *
+   * @param {TouchEvent} event - The event param.
    */
-  onTouchEnd(event) {}
+  onTouchEnd(event) {
+    // console.warn('Implement me')
+  }
 
   /**
-   * The onTouchCancel method.
-   * @param {any} event - The event param.
+   * Event fired when one or more touch points have been disrupted in an implementation-specific manner.
+   *
+   * @param {TouchEvent} event - The event param.
    */
-  onTouchCancel(event) {}
+  onTouchCancel(event) {
+    // console.warn('Implement me')
+  }
 
   /**
-   * The onDoubleTap method.
-   * @param {any} event - The event param.
+   * Event fired when two continuos touch point are placed on the touch surface over a tool.
+   *
+   * @param {TouchEvent} event - The event param.
    */
-  onDoubleTap(event) {}
+  onDoubleTap(event) {
+    // console.warn('Implement me')
+  }
 
   // ///////////////////////////////////
   // VRController events
 
   /**
-   * The onVRControllerButtonDown method.
-   * @param {any} event - The event param.
+   * Event fired when a VR controller button is pressed over a tool.
+   *
+   * @param {object} event - The event param.
    */
-  onVRControllerButtonDown(event) {}
+  onVRControllerButtonDown(event) {
+    // console.warn('Implement me')
+  }
 
   /**
-   * The onVRControllerButtonUp method.
-   * @param {any} event - The event param.
+   * Event fired when a VR controller button is released over a tool.
+   *
+   * @param {object} event - The event param.
    */
-  onVRControllerButtonUp(event) {}
+  onVRControllerButtonUp(event) {
+    // console.warn('Implement me')
+  }
 
   /**
-   * The onVRControllerDoubleClicked method.
-   * @param {any} event - The event param.
+   * Event fired when a VR controller button is pressed twice over a tool.
+   *
+   * @param {object} event - The event param.
    */
-  onVRControllerDoubleClicked(event) {}
+  onVRControllerDoubleClicked(event) {
+    // console.warn('Implement me')
+  }
 
   /**
-   * The onVRPoseChanged method.
-   * @param {any} event - The event param.
+   * Event fired when a VR controller...
+   *
+   * @param {object} event - The event param.
    */
-  onVRPoseChanged(event) {}
+  onVRPoseChanged(event) {
+    // console.warn('Implement me')
+  }
 }
 
 const VIEW_TOOL_MODELS = {
@@ -3726,19 +3972,20 @@ const VIEW_TOOL_MODELS = {
 
 /**
  * Class representing a view tool
+ *
  * @extends BaseTool
  */
 class ViewTool extends BaseTool {
   /**
-   * Create an axial rotation scene widget.
-   * @param {any} appData - The appData value.
-   * @param {any} maipulationModel - The maipulationModel value.
+   * Creates an instance of ViewTool.
+   * @param {object} appData - The appData value.
+   * @param {number} [manipulationModel=VIEW_TOOL_MODELS.VIEWER] - The manipulationModel value
    */
-  constructor(appData, maipulationModel = VIEW_TOOL_MODELS.VIEWER) {
+  constructor(appData, manipulationModel = VIEW_TOOL_MODELS.VIEWER) {
     super(appData);
-    console.log('ViewTool:', maipulationModel);
+    console.log('ViewTool:', manipulationModel);
 
-    this.__maipulationModel = maipulationModel;
+    this.__manipulationModel = manipulationModel;
     this.__defaultMode = 'orbit';
     this.__mode = this.__defaultMode;
 
@@ -3750,15 +3997,9 @@ class ViewTool extends BaseTool {
 
     this.__ongoingTouches = {};
 
-    this.__orbitRateParam = this.addParameter(
-      new zeaEngine.NumberParameter('orbitRate', 1)
-    );
-    this.__dollySpeedParam = this.addParameter(
-      new zeaEngine.NumberParameter('dollySpeed', 0.02)
-    );
-    this.__mouseWheelDollySpeedParam = this.addParameter(
-      new zeaEngine.NumberParameter('mouseWheelDollySpeed', 0.002)
-    );
+    this.__orbitRateParam = this.addParameter(new zeaEngine.NumberParameter('orbitRate', 1));
+    this.__dollySpeedParam = this.addParameter(new zeaEngine.NumberParameter('dollySpeed', 0.02));
+    this.__mouseWheelDollySpeedParam = this.addParameter(new zeaEngine.NumberParameter('mouseWheelDollySpeed', 0.002));
 
     this.__controllerTriggersHeld = [];
   }
@@ -3779,27 +4020,18 @@ class ViewTool extends BaseTool {
       if (!this.vrControllerToolTip) {
         this.vrControllerToolTip = new zeaEngine.Sphere(0.02 * 0.75);
         this.vrControllerToolTipMat = new zeaEngine.Material('Cross', 'FlatSurfaceShader');
-        this.vrControllerToolTipMat
-          .getParameter('BaseColor')
-          .setValue(new zeaEngine.Color('#03E3AC'));
+        this.vrControllerToolTipMat.getParameter('BaseColor').setValue(new zeaEngine.Color('#03E3AC'));
         this.vrControllerToolTipMat.visibleInGeomDataBuffer = false;
       }
       const addIconToController = (controller) => {
-        const geomItem = new zeaEngine.GeomItem(
-          'HandleToolTip',
-          this.vrControllerToolTip,
-          this.vrControllerToolTipMat
-        );
+        const geomItem = new zeaEngine.GeomItem('HandleToolTip', this.vrControllerToolTip, this.vrControllerToolTipMat);
         controller.getTipItem().removeAllChildren();
         controller.getTipItem().addChild(geomItem, false);
       };
       for (const controller of xrvp.getControllers()) {
         addIconToController(controller);
       }
-      this.addIconToControllerId = xrvp.on(
-        'controllerAdded',
-        addIconToController
-      );
+      this.addIconToControllerId = xrvp.on('controllerAdded', addIconToController);
     });
   }
 
@@ -3810,11 +4042,6 @@ class ViewTool extends BaseTool {
     super.deactivateTool();
 
     this.appData.renderer.getXRViewport().then((xrvp) => {
-      // if(this.vrControllerToolTip) {
-      //   // for(let controller of xrvp.getControllers()) {
-      //   //   controller.getTipItem().removeAllChildren();
-      //   // }
-      // }
       xrvp.removeListenerById('controllerAdded', this.addIconToControllerId);
     });
   }
@@ -3824,7 +4051,7 @@ class ViewTool extends BaseTool {
 
   /**
    * The setDefaultMode method.
-   * @param {any} mode - The mode param.
+   * @param {string} mode - The mode param.
    */
   setDefaultMode(mode) {
     this.__defaultMode = mode;
@@ -3832,19 +4059,15 @@ class ViewTool extends BaseTool {
 
   /**
    * The look method.
-   * @param {any} dragVec - The dragVec param.
-   * @param {any} viewport - The viewport param.
+   * @param {Vec2} dragVec - The dragVec param.
+   * @param {GLViewport} viewport - The viewport param.
    */
   look(dragVec, viewport) {
     const focalDistance = viewport.getCamera().getFocalDistance();
-    const orbitRate =
-      this.__orbitRateParam.getValue() * zeaEngine.SystemDesc.isMobileDevice ? -1 : 1;
+    const orbitRate = this.__orbitRateParam.getValue() * zeaEngine.SystemDesc.isMobileDevice ? -1 : 1;
 
     if (this.__keyboardMovement) {
-      const globalXfo = viewport
-        .getCamera()
-        .getParameter('GlobalXfo')
-        .getValue();
+      const globalXfo = viewport.getCamera().getParameter('GlobalXfo').getValue();
       this.__mouseDownCameraXfo = globalXfo.clone();
       this.__mouseDownZaxis = globalXfo.ori.getZaxis();
       const targetOffset = this.__mouseDownZaxis.scale(-focalDistance);
@@ -3875,19 +4098,15 @@ class ViewTool extends BaseTool {
 
   /**
    * The orbit method.
-   * @param {any} dragVec - The dragVec param.
-   * @param {any} viewport - The viewport param.
+   * @param {Vec2} dragVec - The dragVec param.
+   * @param {GLViewport} viewport - The viewport param.
    */
   orbit(dragVec, viewport) {
     const focalDistance = viewport.getCamera().getFocalDistance();
-    const orbitRate =
-      this.__orbitRateParam.getValue() * zeaEngine.SystemDesc.isMobileDevice ? -1 : 1;
+    const orbitRate = this.__orbitRateParam.getValue() * zeaEngine.SystemDesc.isMobileDevice ? -1 : 1;
 
     if (this.__keyboardMovement) {
-      const globalXfo = viewport
-        .getCamera()
-        .getParameter('GlobalXfo')
-        .getValue();
+      const globalXfo = viewport.getCamera().getParameter('GlobalXfo').getValue();
       this.__mouseDownCameraXfo = globalXfo.clone();
       this.__mouseDownZaxis = globalXfo.ori.getZaxis();
       const targetOffset = this.__mouseDownZaxis.scale(-focalDistance);
@@ -3906,9 +4125,7 @@ class ViewTool extends BaseTool {
     pitch.rotateX((dragVec.y / viewport.getHeight()) * Math.PI * -orbitRate);
     globalXfo.ori.multiplyInPlace(pitch);
 
-    globalXfo.tr = this.__mouseDownCameraTarget.add(
-      globalXfo.ori.getZaxis().scale(focalDistance)
-    );
+    globalXfo.tr = this.__mouseDownCameraTarget.add(globalXfo.ori.getZaxis().scale(focalDistance));
 
     if (this.__keyboardMovement) {
       // TODO: debug this potential regression. we now use the generic method which emits a signal.
@@ -3922,8 +4139,9 @@ class ViewTool extends BaseTool {
 
   /**
    * The pan method.
-   * @param {any} dragVec - The dragVec param.
-   * @param {any} viewport - The viewport param.
+   *
+   * @param {Vec2} dragVec - The dragVec param.
+   * @param {GLViewport} viewport - The viewport param.
    */
   pan(dragVec, viewport) {
     const focalDistance = viewport.getCamera().getFocalDistance();
@@ -3932,42 +4150,33 @@ class ViewTool extends BaseTool {
     const yAxis = new zeaEngine.Vec3(0, 1, 0);
 
     const cameraPlaneHeight = 2.0 * focalDistance * Math.tan(0.5 * fovY);
-    const cameraPlaneWidth =
-      cameraPlaneHeight * (viewport.getWidth() / viewport.getHeight());
+    const cameraPlaneWidth = cameraPlaneHeight * (viewport.getWidth() / viewport.getHeight());
     const delta = new zeaEngine.Xfo();
-    delta.tr = xAxis.scale(
-      -(dragVec.x / viewport.getWidth()) * cameraPlaneWidth
-    );
-    delta.tr.addInPlace(
-      yAxis.scale((dragVec.y / viewport.getHeight()) * cameraPlaneHeight)
-    );
+    delta.tr = xAxis.scale(-(dragVec.x / viewport.getWidth()) * cameraPlaneWidth);
+    delta.tr.addInPlace(yAxis.scale((dragVec.y / viewport.getHeight()) * cameraPlaneHeight));
 
-    viewport
-      .getCamera()
-      .getParameter('GlobalXfo')
-      .setValue(this.__mouseDownCameraXfo.multiply(delta));
+    viewport.getCamera().getParameter('GlobalXfo').setValue(this.__mouseDownCameraXfo.multiply(delta));
   }
 
   /**
    * The dolly method.
-   * @param {any} dragVec - The dragVec param.
-   * @param {any} viewport - The viewport param.
+   *
+   * @param {Vec2} dragVec - The dragVec param.
+   * @param {GLViewport} viewport - The viewport param.
    */
   dolly(dragVec, viewport) {
     const dollyDist = dragVec.x * this.__dollySpeedParam.getValue();
     const delta = new zeaEngine.Xfo();
     delta.tr.set(0, 0, dollyDist);
-    viewport
-      .getCamera()
-      .getParameter('GlobalXfo')
-      .setValue(this.__mouseDownCameraXfo.multiply(delta));
+    viewport.getCamera().getParameter('GlobalXfo').setValue(this.__mouseDownCameraXfo.multiply(delta));
   }
 
   /**
    * The panAndZoom method.
-   * @param {any} panDelta - The panDelta param.
-   * @param {any} dragDist - The dragDist param.
-   * @param {any} viewport - The viewport param.
+   *
+   * @param {Vec2} panDelta - The panDelta param.
+   * @param {number} dragDist - The dragDist param.
+   * @param {GLViewport} viewport - The viewport param.
    */
   panAndZoom(panDelta, dragDist, viewport) {
     const focalDistance = viewport.getCamera().getFocalDistance();
@@ -3977,55 +4186,36 @@ class ViewTool extends BaseTool {
     const yAxis = new zeaEngine.Vec3(0, 1, 0);
 
     const cameraPlaneHeight = 2.0 * focalDistance * Math.tan(0.5 * fovY);
-    const cameraPlaneWidth =
-      cameraPlaneHeight * (viewport.getWidth() / viewport.getHeight());
+    const cameraPlaneWidth = cameraPlaneHeight * (viewport.getWidth() / viewport.getHeight());
     const delta = new zeaEngine.Xfo();
-    delta.tr = xAxis.scale(
-      -(panDelta.x / viewport.getWidth()) * cameraPlaneWidth
-    );
-    delta.tr.addInPlace(
-      yAxis.scale((panDelta.y / viewport.getHeight()) * cameraPlaneHeight)
-    );
+    delta.tr = xAxis.scale(-(panDelta.x / viewport.getWidth()) * cameraPlaneWidth);
+    delta.tr.addInPlace(yAxis.scale((panDelta.y / viewport.getHeight()) * cameraPlaneHeight));
 
     const zoomDist = dragDist * focalDistance;
     viewport.getCamera().setFocalDistance(this.__mouseDownFocalDist + zoomDist);
     delta.tr.z += zoomDist;
-    viewport
-      .getCamera()
-      .getParameter('GlobalXfo')
-      .setValue(this.__mouseDownCameraXfo.multiply(delta));
+    viewport.getCamera().getParameter('GlobalXfo').setValue(this.__mouseDownCameraXfo.multiply(delta));
   }
 
   /**
    * The initDrag method.
-   * @param {any} viewport - The viewport param.
+   *
+   * @param {GLViewport} viewport - The viewport param.
    */
   initDrag(viewport) {
     const focalDistance = viewport.getCamera().getFocalDistance();
     this.__mouseDragDelta.set(0, 0);
-    this.__mouseDownCameraXfo = viewport
-      .getCamera()
-      .getParameter('GlobalXfo')
-      .getValue()
-      .clone();
-    this.__mouseDownZaxis = viewport
-      .getCamera()
-      .getParameter('GlobalXfo')
-      .getValue()
-      .ori.getZaxis();
+    this.__mouseDownCameraXfo = viewport.getCamera().getParameter('GlobalXfo').getValue().clone();
+    this.__mouseDownZaxis = viewport.getCamera().getParameter('GlobalXfo').getValue().ori.getZaxis();
     const targetOffset = this.__mouseDownZaxis.scale(-focalDistance);
-    this.__mouseDownCameraTarget = viewport
-      .getCamera()
-      .getParameter('GlobalXfo')
-      .getValue()
-      .tr.add(targetOffset);
+    this.__mouseDownCameraTarget = viewport.getCamera().getParameter('GlobalXfo').getValue().tr.add(targetOffset);
     this.__mouseDownFocalDist = focalDistance;
   }
 
   /**
    * The aimFocus method.
-   * @param {any} camera - The camera param.
-   * @param {any} pos - The pos param.
+   * @param {Camera} camera - The camera param.
+   * @param {Vec3} pos - The pos param.
    */
   aimFocus(camera, pos) {
     if (this.__focusIntervalId) clearInterval(this.__focusIntervalId);
@@ -4059,8 +4249,7 @@ class ViewTool extends BaseTool {
         currDir.y = newDir.y;
         currDir.normalizeInPlace();
 
-        if (currDir.cross(newDir).dot(initlalGlobalXfo.ori.getXaxis()) > 0.0)
-          pitch.rotateX(currDir.angleTo(newDir));
+        if (currDir.cross(newDir).dot(initlalGlobalXfo.ori.getXaxis()) > 0.0) pitch.rotateX(currDir.angleTo(newDir));
         else pitch.rotateX(-currDir.angleTo(newDir));
       }
 
@@ -4092,14 +4281,9 @@ class ViewTool extends BaseTool {
   }
 
   /**
-   * The onMouseMove method.
-   * @param {any} event - The event param.
-   */
-  onMouseMove(event) {}
-
-  /**
    * The onDragStart method.
-   * @param {any} event - The event param.
+   *
+   * @param {MouseEvent} event - The event param.
    */
   onDragStart(event) {
     this.__mouseDownPos = event.mousePos;
@@ -4118,7 +4302,8 @@ class ViewTool extends BaseTool {
 
   /**
    * The onDrag method.
-   * @param {any} event - The event param.
+   *
+   * @param {MouseEvent} event - The event param.
    */
   onDrag(event) {
     // During requestPointerLock, the offsetX/Y values are not updated.
@@ -4155,8 +4340,9 @@ class ViewTool extends BaseTool {
 
   /**
    * The onDragEnd method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   *
+   * @param {MouseEvent} event - The event param.
+   * @return {boolean} The return value.
    */
   onDragEnd(event) {
     // event.viewport.renderGeomDataFbo();
@@ -4166,12 +4352,12 @@ class ViewTool extends BaseTool {
 
   /**
    * The onMouseDown method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   *
+   * @param {MouseEvent} event - The event param.
+   * @return {boolean} The return value.
    */
   onMouseDown(event) {
-    if (this.__maipulationModel == VIEW_TOOL_MODELS.DCC && !event.altKey)
-      return false
+    if (this.__manipulationModel == VIEW_TOOL_MODELS.DCC && !event.altKey) return false
 
     this.dragging = true;
     this.__mouseDownPos = event.mousePos;
@@ -4181,8 +4367,9 @@ class ViewTool extends BaseTool {
 
   /**
    * The onMouseUp method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   *
+   * @param {MouseEvent} event - The event param.
+   * @return {boolean} The return value.
    */
   onMouseUp(event) {
     if (this.dragging) {
@@ -4194,8 +4381,9 @@ class ViewTool extends BaseTool {
 
   /**
    * The onMouseMove method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   *
+   * @param {MouseEvent} event - The event param.
+   * @return {boolean} The return value.
    */
   onMouseMove(event) {
     if (this.dragging) {
@@ -4207,7 +4395,8 @@ class ViewTool extends BaseTool {
 
   /**
    * The onDoubleClick method.
-   * @param {any} event - The event param.
+   *
+   * @param {MouseEvent} event - The event param.
    */
   onDoubleClick(event) {
     if (event.intersectionData) {
@@ -4216,35 +4405,31 @@ class ViewTool extends BaseTool {
       const pos = camera
         .getParameter('GlobalXfo')
         .getValue()
-        .tr.add(
-          event.intersectionData.mouseRay.dir.scale(event.intersectionData.dist)
-        );
+        .tr.add(event.intersectionData.mouseRay.dir.scale(event.intersectionData.dist));
       this.aimFocus(camera, pos);
     }
   }
 
   /**
    * The onWheel method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   *
+   * @param {MouseEvent} event - The event param.
+   * @return {boolean} The return value.
    */
   onWheel(event) {
-    if (this.__maipulationModel == VIEW_TOOL_MODELS.DCC && !event.altKey)
-      return false
+    if (this.__manipulationModel == VIEW_TOOL_MODELS.DCC && !event.altKey) return false
 
     const viewport = event.viewport;
     const xfo = viewport.getCamera().getParameter('GlobalXfo').getValue();
     const vec = xfo.ori.getZaxis();
-    if (this.__mouseWheelZoomIntervalId)
-      clearInterval(this.__mouseWheelZoomIntervalId);
+    if (this.__mouseWheelZoomIntervalId) clearInterval(this.__mouseWheelZoomIntervalId);
     let count = 0;
     const applyMovement = () => {
       const focalDistance = viewport.getCamera().getFocalDistance();
       const mouseWheelDollySpeed = this.__mouseWheelDollySpeedParam.getValue();
       const zoomDist = event.deltaY * mouseWheelDollySpeed * focalDistance * 0.2;
       xfo.tr.addInPlace(vec.scale(zoomDist));
-      if (this.__defaultMode == 'orbit')
-        viewport.getCamera().setFocalDistance(focalDistance + zoomDist);
+      if (this.__defaultMode == 'orbit') viewport.getCamera().setFocalDistance(focalDistance + zoomDist);
       viewport.getCamera().getParameter('GlobalXfo').setValue(xfo);
 
       count++;
@@ -4259,115 +4444,32 @@ class ViewTool extends BaseTool {
     applyMovement();
   }
 
-  // eslint-disable-next-line require-jsdoc
+  /**
+   *
+   *
+   * @param {*} velChange -
+   * @param {GLViewport} viewport -
+   * @private
+   */
   __integrateVelocityChange(velChange, viewport) {
     const delta = new zeaEngine.Xfo();
     delta.tr = this.__velocity.normalize().scale(this.__maxVel);
     viewport
       .getCamera()
       .getParameter('GlobalXfo')
-      .setValue(
-        viewport
-          .getCamera()
-          .getParameter('GlobalXfo')
-          .getValue()
-          .multiply(delta)
-      );
-  }
-
-  /**
-   * The onKeyPressed method.
-   * @param {any} key - The key param.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
-   */
-  onKeyPressed(event) {
-    // Note: onKeyPressed is called intiallly only once, and then we
-    // get a series of calls. Here we ignore subsequent events.
-    // (TODO: move this logic to a special controller)
-    /*
-    switch (key) {
-      case 'w':
-        if (this.__keysPressed.indexOf(key) != -1)
-          return false;
-        this.__velocity.z -= 1.0;
-        break;
-      case 's':
-        if (this.__keysPressed.indexOf(key) != -1)
-          return false;
-        this.__velocity.z += 1.0;
-        break;
-      case 'a':
-        if (this.__keysPressed.indexOf(key) != -1)
-          return false;
-        this.__velocity.x -= 1.0;
-        break;
-      case 'd':
-        if (this.__keysPressed.indexOf(key) != -1)
-          return false;
-        this.__velocity.x += 1.0;
-        break;
-      default:
-        return false;
-    }
-    this.__keysPressed.push(key);
-    if (!this.__keyboardMovement) {
-      this.__keyboardMovement = true;
-      let animationFrame = ()=>{
-        this.__integrateVelocityChange()
-        if (this.__keyboardMovement)
-          window.requestAnimationFrame(animationFrame);
-      }
-      window.requestAnimationFrame(animationFrame);
-    }
-    */
-    return false // no keys handled
-  }
-
-  /**
-   * The onKeyDown method.
-   * @param {any} key - The key param.
-   * @param {any} event - The event param.
-   */
-  onKeyDown(event) {}
-
-  /**
-   * The onKeyUp method.
-   * @param {any} key - The key param.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
-   */
-  onKeyUp(event) {
-    // (TODO: move this logic to a special controller)
-    /*
-    switch (key) {
-      case 'w':
-        this.__velocity.z += 1.0;
-        break;
-      case 's':
-        this.__velocity.z -= 1.0;
-        break;
-      case 'a':
-        this.__velocity.x += 1.0;
-        break;
-      case 'd':
-        this.__velocity.x -= 1.0;
-        break;
-      default:
-        return false;
-    }
-    let keyIndex = this.__keysPressed.indexOf(key);
-    this.__keysPressed.splice(keyIndex, 1);
-    if (this.__keysPressed.length == 0)
-      this.__keyboardMovement = false;
-    */
-    return true
+      .setValue(viewport.getCamera().getParameter('GlobalXfo').getValue().multiply(delta));
   }
 
   // ///////////////////////////////////
   // Touch events
 
-  // eslint-disable-next-line require-jsdoc
+  /**
+   *
+   *
+   * @param {*} touch -
+   * @param {*} viewport -
+   * @private
+   */
   __startTouch(touch, viewport) {
     this.__ongoingTouches[touch.identifier] = {
       identifier: touch.identifier,
@@ -4375,7 +4477,13 @@ class ViewTool extends BaseTool {
     };
   }
 
-  // eslint-disable-next-line require-jsdoc
+  /**
+   *
+   *
+   * @param {*} touch -
+   * @param {*} viewport -
+   * @private
+   */
   __endTouch(touch, viewport) {
     // const idx = this.__ongoingTouchIndexById(touch.identifier);
     // this.__ongoingTouches.splice(idx, 1); // remove it; we're done
@@ -4384,16 +4492,16 @@ class ViewTool extends BaseTool {
 
   /**
    * The onTouchStart method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   *
+   * @param {TouchEvent} event - The event param.
+   * @return {boolean} - The return value.
    */
   onTouchStart(event) {
     // console.log("onTouchStart");
     event.preventDefault();
     event.stopPropagation();
 
-    if (Object.keys(this.__ongoingTouches).length == 0)
-      this.__manipMode = undefined;
+    if (Object.keys(this.__ongoingTouches).length == 0) this.__manipMode = undefined;
 
     const touches = event.changedTouches;
     for (let i = 0; i < touches.length; i++) {
@@ -4405,8 +4513,9 @@ class ViewTool extends BaseTool {
 
   /**
    * The onTouchMove method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   *
+   * @param {TouchEvent} event - The event param.
+   * @return {boolean} The return value.
    */
   onTouchMove(event) {
     event.preventDefault();
@@ -4453,8 +4562,9 @@ class ViewTool extends BaseTool {
 
   /**
    * The onTouchEnd method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   *
+   * @param {TouchEvent} event - The event param.
+   * @return {boolean} - The return value.
    */
   onTouchEnd(event) {
     event.preventDefault();
@@ -4469,15 +4579,15 @@ class ViewTool extends BaseTool {
     for (let i = 0; i < touches.length; i++) {
       this.__endTouch(touches[i]);
     }
-    if (Object.keys(this.__ongoingTouches).length == 0)
-      this.__manipMode = undefined;
+    if (Object.keys(this.__ongoingTouches).length == 0) this.__manipMode = undefined;
     return true
   }
 
   /**
    * The onTouchCancel method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   *
+   * @param {TouchEvent} event - The event param.
+   * @return {boolean} - The return value.
    */
   onTouchCancel(event) {
     console.log('touchcancel.');
@@ -4490,7 +4600,8 @@ class ViewTool extends BaseTool {
 
   /**
    * The onDoubleTap method.
-   * @param {any} event - The event param.
+   *
+   * @param {TouchEvent} event - The event param.
    */
   onDoubleTap(event) {
     const touches = event.changedTouches;
@@ -4503,9 +4614,7 @@ class ViewTool extends BaseTool {
       const pos = camera
         .getParameter('GlobalXfo')
         .getValue()
-        .tr.add(
-          event.intersectionData.mouseRay.dir.scale(event.intersectionData.dist)
-        );
+        .tr.add(event.intersectionData.mouseRay.dir.scale(event.intersectionData.dist));
       this.aimFocus(camera, pos);
     }
   }
@@ -4513,35 +4622,35 @@ class ViewTool extends BaseTool {
   // ///////////////////////////////////
   // VRController events
 
-  // eslint-disable-next-line require-jsdoc
+  /**
+   *
+   *
+   * @param {VRViewport} vrviewport
+   * @private
+   */
   __initMoveStage(vrviewport) {
     if (this.__controllerTriggersHeld.length == 1) {
-      this.__grabPos = this.__controllerTriggersHeld[0]
-        .getControllerTipStageLocalXfo()
-        .tr.clone();
+      this.__grabPos = this.__controllerTriggersHeld[0].getControllerTipStageLocalXfo().tr.clone();
       this.stageXfo__GrabStart = vrviewport.getXfo().clone();
       this.__invOri = this.stageXfo__GrabStart.ori.inverse();
     } else if (this.__controllerTriggersHeld.length == 2) {
-      const p0 = this.__controllerTriggersHeld[0].getControllerTipStageLocalXfo()
-        .tr;
-      const p1 = this.__controllerTriggersHeld[1].getControllerTipStageLocalXfo()
-        .tr;
+      const p0 = this.__controllerTriggersHeld[0].getControllerTipStageLocalXfo().tr;
+      const p1 = this.__controllerTriggersHeld[1].getControllerTipStageLocalXfo().tr;
       this.__grabDir = p1.subtract(p0);
       this.__grabPos = p0.lerp(p1, 0.5);
       this.__grabDir.y = 0.0;
       this.__grabDist = this.__grabDir.length();
       this.__grabDir.scaleInPlace(1 / this.__grabDist);
       this.stageXfo__GrabStart = vrviewport.getXfo().clone();
-      this.__grab_to_stage = this.__grabPos.subtract(
-        this.stageXfo__GrabStart.tr
-      );
+      this.__grab_to_stage = this.__grabPos.subtract(this.stageXfo__GrabStart.tr);
     }
   }
 
   /**
    * The onVRControllerButtonDown method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   *
+   * @param {object} event - The event param.
+   * @return {boolean} The return value.
    */
   onVRControllerButtonDown(event) {
     if (event.button != 1) return
@@ -4552,8 +4661,9 @@ class ViewTool extends BaseTool {
 
   /**
    * The onVRControllerButtonUp method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   *
+   * @param {object} event - The event param.
+   * @return {boolean} The return value.
    */
   onVRControllerButtonUp(event) {
     if (event.button != 1) return
@@ -4565,13 +4675,11 @@ class ViewTool extends BaseTool {
 
   /**
    * The onVRControllerDoubleClicked method.
-   * @param {any} event - The event param.
+   *
+   * @param {object} event - The event param.
    */
   onVRControllerDoubleClicked(event) {
-    console.log(
-      'onVRControllerDoubleClicked:',
-      this.__controllerTriggersHeld.length
-    );
+    console.log('onVRControllerDoubleClicked:', this.__controllerTriggersHeld.length);
 
     const stageXfo = event.vrviewport.getXfo().clone();
     stageXfo.sc.set(1, 1, 1);
@@ -4580,13 +4688,13 @@ class ViewTool extends BaseTool {
 
   /**
    * The onVRPoseChanged method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   *
+   * @param {object} event - The event param.
+   * @return {boolean} The return value.
    */
   onVRPoseChanged(event) {
     if (this.__controllerTriggersHeld.length == 1) {
-      const grabPos = this.__controllerTriggersHeld[0].getControllerTipStageLocalXfo()
-        .tr;
+      const grabPos = this.__controllerTriggersHeld[0].getControllerTipStageLocalXfo().tr;
 
       const deltaXfo = new zeaEngine.Xfo();
       deltaXfo.tr = this.__grabPos.subtract(grabPos);
@@ -4597,10 +4705,8 @@ class ViewTool extends BaseTool {
       event.vrviewport.setXfo(stageXfo);
       return true
     } else if (this.__controllerTriggersHeld.length == 2) {
-      const p0 = this.__controllerTriggersHeld[0].getControllerTipStageLocalXfo()
-        .tr;
-      const p1 = this.__controllerTriggersHeld[1].getControllerTipStageLocalXfo()
-        .tr;
+      const p0 = this.__controllerTriggersHeld[0].getControllerTipStageLocalXfo().tr;
+      const p1 = this.__controllerTriggersHeld[1].getControllerTipStageLocalXfo().tr;
 
       const grabPos = p0.lerp(p1, 0.5);
       const grabDir = p1.subtract(p0);
@@ -4655,12 +4761,14 @@ class ViewTool extends BaseTool {
 
 /**
  * Class representing a selection tool.
+ *
  * @extends BaseTool
  */
 class SelectionTool extends BaseTool {
   /**
-   * Create a selection tool.
-   * @param {any} appData - The appData value.
+   * Creates an instance of SelectionTool.
+   *
+   * @param {object} appData - The appData value
    */
   constructor(appData) {
     super(appData);
@@ -4669,33 +4777,27 @@ class SelectionTool extends BaseTool {
 
     this.selectionRect = new zeaEngine.Rect(1, 1);
     this.selectionRectMat = new zeaEngine.Material('marker', 'ScreenSpaceShader');
-    this.selectionRectMat
-      .getParameter('BaseColor')
-      .setValue(new zeaEngine.Color('#03E3AC'));
+    this.selectionRectMat.getParameter('BaseColor').setValue(new zeaEngine.Color('#03E3AC'));
     this.selectionRectXfo = new zeaEngine.Xfo();
     this.selectionRectXfo.tr.set(0.5, 0.5, 0);
     this.selectionRectXfo.sc.set(0, 0, 0);
   }
 
   /**
-   * The activateTool method.
+   * Activates selection tool.
    */
   activateTool() {
     super.activateTool();
 
     if (!this.rectItem) {
-      this.rectItem = new zeaEngine.GeomItem(
-        'selectionRect',
-        this.selectionRect,
-        this.selectionRectMat
-      );
+      this.rectItem = new zeaEngine.GeomItem('selectionRect', this.selectionRect, this.selectionRectMat);
       this.rectItem.getParameter('Visible').setValue(false);
       this.appData.renderer.addTreeItem(this.rectItem);
     }
   }
 
   /**
-   * The deactivateTool method.
+   * Deactivates the selection tool.
    */
   deactivateTool() {
     super.deactivateTool();
@@ -4704,9 +4806,10 @@ class SelectionTool extends BaseTool {
   }
 
   /**
-   * The onMouseDown method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * Event fired when a pointing device button is pressed while the pointer is over the tool.
+   *
+   * @param {MouseEvent} event - The event param.
+   * @return {boolean} The return value.
    */
   onMouseDown(event) {
     if (event.button == 0 && !event.altKey) {
@@ -4718,12 +4821,15 @@ class SelectionTool extends BaseTool {
     return false
   }
 
-  // eslint-disable-next-line require-jsdoc
+  /**
+   *
+   *
+   * @param {GLViewport} viewport - The viewport value
+   * @param {*} delta - The delta value
+   * @private
+   */
   __resizeRect(viewport, delta) {
-    const sc = new zeaEngine.Vec2(
-      (1 / viewport.getWidth()) * 2,
-      (1 / viewport.getHeight()) * 2
-    );
+    const sc = new zeaEngine.Vec2((1 / viewport.getWidth()) * 2, (1 / viewport.getHeight()) * 2);
     const size = delta.multiply(sc);
     this.selectionRectXfo.sc.set(Math.abs(size.x), Math.abs(size.y), 1);
 
@@ -4736,9 +4842,10 @@ class SelectionTool extends BaseTool {
   }
 
   /**
-   * The onMouseMove method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * Event fired when a pointing device is moved while the cursor's hotspot is inside it.
+   *
+   * @param {MouseEvent} event - The event param.
+   * @return {boolean} The return value.
    */
   onMouseMove(event) {
     if (this.mouseDownPos) {
@@ -4760,9 +4867,10 @@ class SelectionTool extends BaseTool {
   }
 
   /**
-   * The onMouseUp method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * Event fired when a pointing device button is released while the pointer is over the tool.
+   *
+   * @param {MouseEvent} event - The event param.
+   * @return {boolean} The return value.
    */
   onMouseUp(event) {
     if (this.mouseDownPos) {
@@ -4770,52 +4878,33 @@ class SelectionTool extends BaseTool {
       if (this.dragging) {
         this.rectItem.getParameter('Visible').setValue(false);
         const mouseUpPos = event.mousePos;
-        const tl = new zeaEngine.Vec2(
-          Math.min(this.mouseDownPos.x, mouseUpPos.x),
-          Math.min(this.mouseDownPos.y, mouseUpPos.y)
-        );
-        const br = new zeaEngine.Vec2(
-          Math.max(this.mouseDownPos.x, mouseUpPos.x),
-          Math.max(this.mouseDownPos.y, mouseUpPos.y)
-        );
+        const tl = new zeaEngine.Vec2(Math.min(this.mouseDownPos.x, mouseUpPos.x), Math.min(this.mouseDownPos.y, mouseUpPos.y));
+        const br = new zeaEngine.Vec2(Math.max(this.mouseDownPos.x, mouseUpPos.x), Math.max(this.mouseDownPos.y, mouseUpPos.y));
         const geomItems = event.viewport.getGeomItemsInRect(tl, br);
 
         if (this.appData.selectionManager.pickingModeActive()) {
           this.appData.selectionManager.pick(geomItems);
         } else {
           // Remove all the scene widgets. (UI elements should not be selectable.)
-          const regularGeomItems = new Set(
-            [...geomItems].filter((x) => !(x.getOwner() instanceof Handle))
-          );
+          const regularGeomItems = new Set([...geomItems].filter((x) => !(x.getOwner() instanceof Handle)));
 
           if (!event.shiftKey) {
-            this.appData.selectionManager.selectItems(
-              regularGeomItems,
-              !event.ctrlKey
-            );
+            this.appData.selectionManager.selectItems(regularGeomItems, !event.ctrlKey);
           } else {
             this.appData.selectionManager.deselectItems(regularGeomItems);
           }
 
           this.selectionRectXfo.sc.set(0, 0, 0);
-          this.rectItem
-            .getParameter('GlobalXfo')
-            .setValue(this.selectionRectXfo);
+          this.rectItem.getParameter('GlobalXfo').setValue(this.selectionRectXfo);
         }
       } else {
         const intersectionData = event.viewport.getGeomDataAtPos(event.mousePos);
-        if (
-          intersectionData != undefined &&
-          !(intersectionData.geomItem.getOwner() instanceof Handle)
-        ) {
+        if (intersectionData != undefined && !(intersectionData.geomItem.getOwner() instanceof Handle)) {
           if (this.appData.selectionManager.pickingModeActive()) {
             this.appData.selectionManager.pick(intersectionData.geomItem);
           } else {
             if (!event.shiftKey) {
-              this.appData.selectionManager.toggleItemSelection(
-                intersectionData.geomItem,
-                !event.ctrlKey
-              );
+              this.appData.selectionManager.toggleItemSelection(intersectionData.geomItem, !event.ctrlKey);
             } else {
               const items = new Set();
               items.add(intersectionData.geomItem);
@@ -4836,54 +4925,34 @@ class SelectionTool extends BaseTool {
   // VRController events
 
   /**
-   * The onVRControllerButtonDown method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * Event fired when a VR controller button is pressed over a tool.
+   *
+   * @param {object} event - The event param.
+   * @return {boolean} The return value.
    */
   onVRControllerButtonDown(event) {
     if (event.button == 1) {
       const intersectionData = event.controller.getGeomItemAtTip();
-      if (
-        intersectionData != undefined &&
-        !(intersectionData.geomItem.getOwner() instanceof Handle)
-      ) {
-        this.appData.selectionManager.toggleItemSelection(
-          intersectionData.geomItem
-        );
+      if (intersectionData != undefined && !(intersectionData.geomItem.getOwner() instanceof Handle)) {
+        this.appData.selectionManager.toggleItemSelection(intersectionData.geomItem);
         return true
       }
     }
   }
-
-  // onVRPoseChanged(event) {
-  // }
-
-  // onVRControllerButtonUp(event) {
-
-  //   if (event.button == 1 && this.activeController == event.controller) {
-  //     const controllerUpPos = event.controller.getTipXfo();
-  //     if(this.controllerDownPos.distanceTo(controllerUpPos) < 0.1) {
-  //       const intersectionData = event.controller.getGeomItemAtTip();
-  //       if (intersectionData != undefined && !(intersectionData.geomItem instanceof Handle)) {
-  //         this.appData.selectionManager.toggleItemSelection(intersectionData.geomItem);
-  //         return true;
-  //       }
-  //     }
-  //   }
-  // }
 }
 
 UndoRedoManager.registerChange('SelectionTool', SelectionTool);
 
 /**
  * Class representing an open VR UI tool.
+ *
  * @extends BaseTool
  */
 class OpenVRUITool extends BaseTool {
   /**
    * Create an open VR UI tool.
-   * @param {any} appData - The appData value.
-   * @param {any} vrUITool - The vrUITool value.
+   * @param {object} appData - The appData value.
+   * @param {VRUITool} vrUITool - The vrUITool value.
    */
   constructor(appData, vrUITool) {
     super(appData);
@@ -4900,8 +4969,7 @@ class OpenVRUITool extends BaseTool {
     super.uninstall();
 
     // Also remove the UI tool
-    if (this.uiToolIndex > 0)
-      this.appData.toolManager.removeToolByHandle(this.vrUITool);
+    if (this.uiToolIndex > 0) this.appData.toolManager.removeToolByHandle(this.vrUITool);
   }
 
   // ///////////////////////////////////
@@ -4909,13 +4977,15 @@ class OpenVRUITool extends BaseTool {
 
   /**
    * The onVRControllerButtonDown method.
-   * @param {any} event - The event param.
+   *
+   * @param {object} event - The event param.
    */
   onVRControllerButtonDown(event) {}
 
   /**
    * The onVRControllerButtonUp method.
-   * @param {any} event - The event param.
+   *
+   * @param {object} event - The event param.
    */
   onVRControllerButtonUp(event) {}
 
@@ -4928,8 +4998,9 @@ class OpenVRUITool extends BaseTool {
 
   /**
    * The onVRPoseChanged method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   *
+   * @param {object} event - The event param.
+   * @return {boolean} The return value.
    */
   onVRPoseChanged(event) {
     if (this.vrUITool.installed()) return
@@ -4956,16 +5027,15 @@ class OpenVRUITool extends BaseTool {
     };
 
     if (event.controllers.length > 0) {
-      if (checkControllers(event.controllers[0], event.controllers[1]))
-        return true
-      if (checkControllers(event.controllers[1], event.controllers[0]))
-        return true
+      if (checkControllers(event.controllers[0], event.controllers[1])) return true
+      if (checkControllers(event.controllers[1], event.controllers[0])) return true
     }
     this.uiToolIndex = -1;
     this.__stayClosed = false;
   }
 }
 
+/* eslint-disable require-jsdoc */
 const util = newUtil();
 const inliner = newInliner();
 const fontFaces = newFontFaces();
@@ -5021,13 +5091,15 @@ function toSvg(node, options) {
     .then(inlineImages)
     .then(applyOptions)
     .then(function (clone) {
-      return makeSvgDataUri(
-        clone,
-        options.width || util.width(node),
-        options.height || util.height(node)
-      )
+      return makeSvgDataUri(clone, options.width || util.width(node), options.height || util.height(node))
     })
 
+  /**
+   *
+   *
+   * @param {object} clone -
+   * @return {object} -
+   */
   function applyOptions(clone) {
     if (options.bgcolor) clone.style.backgroundColor = options.bgcolor;
 
@@ -5050,9 +5122,7 @@ function toSvg(node, options) {
  * */
 function toPixelData(node, options) {
   return draw(node, options || {}).then(function (canvas) {
-    return canvas
-      .getContext('2d')
-      .getImageData(0, 0, util.width(node), util.height(node)).data
+    return canvas.getContext('2d').getImageData(0, 0, util.width(node), util.height(node)).data
   })
 }
 
@@ -5099,6 +5169,11 @@ function toBlob(node, options) {
   return draw(node, options || {}).then(util.canvasToBlob)
 }
 
+/**
+ *
+ *
+ * @param {object} options -
+ */
 function copyOptions(options) {
   // Copy options to impl options for use in impl
   if (typeof options.imagePlaceholder === 'undefined') {
@@ -5113,7 +5188,13 @@ function copyOptions(options) {
     domtoimage.impl.options.cacheBust = options.cacheBust;
   }
 }
-
+/**
+ *
+ *
+ * @param {*} domNode -
+ * @param {*} options -
+ * @return {*}
+ */
 function draw(domNode, options) {
   return toSvg(domNode, options)
     .then(util.makeImage)
@@ -5124,6 +5205,12 @@ function draw(domNode, options) {
       return canvas
     })
 
+  /**
+   *
+   *
+   * @param {*} domNode -
+   * @return {*}
+   */
   function newCanvas(domNode) {
     const canvas = document.createElement('canvas');
     canvas.width = options.width || util.width(domNode);
@@ -5152,8 +5239,7 @@ function cloneNode(node, filter, root) {
     })
 
   function makeNodeCopy(node) {
-    if (node instanceof HTMLCanvasElement)
-      return util.makeImage(node.toDataURL())
+    if (node instanceof HTMLCanvasElement) return util.makeImage(node.toDataURL())
     return node.cloneNode(false)
   }
 
@@ -5161,11 +5247,9 @@ function cloneNode(node, filter, root) {
     const children = original.childNodes;
     if (children.length === 0) return Promise.resolve(clone)
 
-    return cloneChildrenInOrder(clone, util.asArray(children), filter).then(
-      function () {
-        return clone
-      }
-    )
+    return cloneChildrenInOrder(clone, util.asArray(children), filter).then(function () {
+      return clone
+    })
 
     function cloneChildrenInOrder(parent, children, filter) {
       let done = Promise.resolve();
@@ -5203,11 +5287,7 @@ function cloneNode(node, filter, root) {
 
         function copyProperties(source, target) {
           util.asArray(source).forEach(function (name) {
-            target.setProperty(
-              name,
-              source.getPropertyValue(name),
-              source.getPropertyPriority(name)
-            );
+            target.setProperty(name, source.getPropertyValue(name), source.getPropertyPriority(name));
           });
         }
       }
@@ -5227,16 +5307,12 @@ function cloneNode(node, filter, root) {
         const className = util.uid();
         clone.className = clone.className + ' ' + className;
         const styleElement = document.createElement('style');
-        styleElement.appendChild(
-          formatPseudoElementStyle(className, element, style)
-        );
+        styleElement.appendChild(formatPseudoElementStyle(className, element, style));
         clone.appendChild(styleElement);
 
         function formatPseudoElementStyle(className, element, style) {
           const selector = '.' + className + ':' + element;
-          const cssText = style.cssText
-            ? formatCssText(style)
-            : formatCssProperties(style);
+          const cssText = style.cssText ? formatCssText(style) : formatCssProperties(style);
           return document.createTextNode(selector + '{' + cssText + '}')
 
           function formatCssText(style) {
@@ -5248,12 +5324,7 @@ function cloneNode(node, filter, root) {
             return util.asArray(style).map(formatProperty).join('; ') + ';'
 
             function formatProperty(name) {
-              return (
-                name +
-                ': ' +
-                style.getPropertyValue(name) +
-                (style.getPropertyPriority(name) ? ' !important' : '')
-              )
+              return name + ': ' + style.getPropertyValue(name) + (style.getPropertyPriority(name) ? ' !important' : '')
             }
           }
         }
@@ -5261,10 +5332,8 @@ function cloneNode(node, filter, root) {
     }
 
     function copyUserInput() {
-      if (original instanceof HTMLTextAreaElement)
-        clone.innerHTML = original.value;
-      if (original instanceof HTMLInputElement)
-        clone.setAttribute('value', original.value);
+      if (original instanceof HTMLTextAreaElement) clone.innerHTML = original.value;
+      if (original instanceof HTMLInputElement) clone.setAttribute('value', original.value);
     }
 
     function fixSvg() {
@@ -5305,11 +5374,7 @@ function makeSvgDataUri(node, width, height) {
     })
     .then(util.escapeXhtml)
     .then(function (xhtml) {
-      return (
-        '<foreignObject x="0" y="0" width="100%" height="100%">' +
-        xhtml +
-        '</foreignObject>'
-      )
+      return '<foreignObject x="0" y="0" width="100%" height="100%">' + xhtml + '</foreignObject>'
     })
     .then(function (foreignObject) {
       return (
@@ -5389,8 +5454,7 @@ function newUtil() {
       const length = binaryString.length;
       const binaryArray = new Uint8Array(length);
 
-      for (let i = 0; i < length; i++)
-        binaryArray[i] = binaryString.charCodeAt(i);
+      for (let i = 0; i < length; i++) binaryArray[i] = binaryString.charCodeAt(i);
 
       resolve(
         new Blob([binaryArray], {
@@ -5428,9 +5492,7 @@ function newUtil() {
 
       function fourRandomChars() {
         /* see http://stackoverflow.com/a/6248722/2519373 */
-        return (
-          '0000' + ((Math.random() * Math.pow(36, 4)) << 0).toString(36)
-        ).slice(-4)
+        return ('0000' + ((Math.random() * Math.pow(36, 4)) << 0).toString(36)).slice(-4)
       }
     }
   }
@@ -5479,9 +5541,7 @@ function newUtil() {
           if (placeholder) {
             resolve(placeholder);
           } else {
-            fail(
-              'cannot fetch resource: ' + url + ', status: ' + request.status
-            );
+            fail('cannot fetch resource: ' + url + ', status: ' + request.status);
           }
 
           return
@@ -5499,12 +5559,7 @@ function newUtil() {
         if (placeholder) {
           resolve(placeholder);
         } else {
-          fail(
-            'timeout of ' +
-              TIMEOUT +
-              'ms occured while fetching resource: ' +
-              url
-          );
+          fail('timeout of ' + TIMEOUT + 'ms occured while fetching resource: ' + url);
         }
       }
 
@@ -5603,10 +5658,7 @@ function newInliner() {
       })
 
     function urlAsRegex(url) {
-      return new RegExp(
-        '(url\\([\'"]?)(' + util.escape(url) + ')([\'"]?\\))',
-        'g'
-      )
+      return new RegExp('(url\\([\'"]?)(' + util.escape(url) + ')([\'"]?\\))', 'g')
     }
   }
 
@@ -5675,14 +5727,9 @@ function newFontFaces() {
       const cssRules = [];
       styleSheets.forEach(function (sheet) {
         try {
-          util
-            .asArray(sheet.cssRules || [])
-            .forEach(cssRules.push.bind(cssRules));
+          util.asArray(sheet.cssRules || []).forEach(cssRules.push.bind(cssRules));
         } catch (e) {
-          console.log(
-            'Error while reading CSS rules from ' + sheet.href,
-            e.toString()
-          );
+          console.log('Error while reading CSS rules from ' + sheet.href, e.toString());
         }
       });
       return cssRules
@@ -5754,11 +5801,7 @@ function newImages() {
       return inliner
         .inlineAll(background)
         .then(function (inlined) {
-          node.style.setProperty(
-            'background',
-            inlined,
-            node.style.getPropertyPriority('background')
-          );
+          node.style.setProperty('background', inlined, node.style.getPropertyPriority('background'));
         })
         .then(function () {
           return node
@@ -5830,10 +5873,7 @@ class VRControllerUI extends zeaEngine.GeomItem {
             return false
           }
           // console.log(elem.classList)
-          if (
-            elem.classList.contains(VR_UI_ELEM_CLASS) ||
-            elem == this.__vrUIDOMElement
-          ) {
+          if (elem.classList.contains(VR_UI_ELEM_CLASS) || elem == this.__vrUIDOMElement) {
             if (mutatedElems.indexOf(elem) == -1) mutatedElems.push(elem);
             break
           }
@@ -5908,17 +5948,8 @@ class VRControllerUI extends zeaEngine.GeomItem {
    * The updateUIImage method.
    */
   updateUIImage() {
-    const imageData = this.mainCtx.getImageData(
-      0,
-      0,
-      this.__rect.width,
-      this.__rect.height
-    );
-    this.__uiimage.setData(
-      this.__rect.width,
-      this.__rect.height,
-      new Uint8Array(imageData.data.buffer)
-    );
+    const imageData = this.mainCtx.getImageData(0, 0, this.__rect.width, this.__rect.height);
+    this.__uiimage.setData(this.__rect.width, this.__rect.height, new Uint8Array(imageData.data.buffer));
   }
 
   /**
@@ -5934,17 +5965,10 @@ class VRControllerUI extends zeaEngine.GeomItem {
       if (rect.width * rect.height == 0) return
 
       // const dpm = 0.0003; //dots-per-meter (1 each 1/2mm)
-      if (
-        rect.width != this.__rect.width ||
-        rect.height != this.__rect.height
-      ) {
+      if (rect.width != this.__rect.width || rect.height != this.__rect.height) {
         this.__rect = rect;
         const dpm = 0.0007; // dots-per-meter (1 each 1/2mm)
-        this.__uiGeomOffsetXfo.sc.set(
-          this.__rect.width * dpm,
-          this.__rect.height * dpm,
-          1.0
-        );
+        this.__uiGeomOffsetXfo.sc.set(this.__rect.width * dpm, this.__rect.height * dpm, 1.0);
         this.setGeomOffsetXfo(this.__uiGeomOffsetXfo);
 
         this.appData.session.pub('pose-message', {
@@ -5995,12 +6019,13 @@ class VRControllerUI extends zeaEngine.GeomItem {
 
 /**
  * Class representing a VR UI tool.
+ *
  * @extends BaseTool
  */
 class VRUITool extends BaseTool {
   /**
    * Create a VR UI tool.
-   * @param {any} appData - The appData value.
+   * @param {object} appData - The appData value.
    */
   constructor(appData) {
     super(appData);
@@ -6011,11 +6036,7 @@ class VRUITool extends BaseTool {
     this.__vrUIDOMElement.className = 'vrUI';
     document.body.appendChild(this.__vrUIDOMHolderElement);
 
-    this.controllerUI = new VRControllerUI(
-      appData,
-      this.__vrUIDOMHolderElement,
-      this.__vrUIDOMElement
-    );
+    this.controllerUI = new VRControllerUI(appData, this.__vrUIDOMHolderElement, this.__vrUIDOMElement);
     this.controllerUI.addRef(this);
 
     appData.renderer.addTreeItem(this.controllerUI);
@@ -6036,10 +6057,7 @@ class VRUITool extends BaseTool {
     line.setBoundingBoxDirty();
     this.__pointerLocalXfo = new zeaEngine.Xfo();
     this.__pointerLocalXfo.sc.set(1, 1, 0.1);
-    this.__pointerLocalXfo.ori.setFromAxisAndAngle(
-      new zeaEngine.Vec3(1, 0, 0),
-      Math.PI * -0.2
-    );
+    this.__pointerLocalXfo.ori.setFromAxisAndAngle(new zeaEngine.Vec3(1, 0, 0), Math.PI * -0.2);
 
     this.__uiPointerItem = new zeaEngine.GeomItem('VRControllerPointer', line, pointermat);
     this.__uiPointerItem.addRef(this);
@@ -6049,7 +6067,8 @@ class VRUITool extends BaseTool {
 
   /**
    * The getName method.
-   * @return {any} The return value.
+   *
+   * @return {string} The return value.
    */
   getName() {
     return 'VRUITool'
@@ -6059,25 +6078,19 @@ class VRUITool extends BaseTool {
 
   /**
    * The setUIControllers method.
-   * @param {any} openUITool - The openUITool param.
-   * @param {any} uiController - The uiController param.
-   * @param {any} pointerController - The pointerController param.
-   * @param {any} headXfo - The headXfo param.
+   * @param {*} openUITool - The openUITool param.
+   * @param {*} uiController - The uiController param.
+   * @param {*} pointerController - The pointerController param.
+   * @param {Xfo} headXfo - The headXfo param.
    */
   setUIControllers(openUITool, uiController, pointerController, headXfo) {
     this.openUITool = openUITool;
     this.uiController = uiController;
     this.pointerController = pointerController;
 
-    const xfoA = this.uiController
-      .getTreeItem()
-      .getParameter('GlobalXfo')
-      .getValue();
+    const xfoA = this.uiController.getTreeItem().getParameter('GlobalXfo').getValue();
     if (this.pointerController) {
-      const xfoB = this.pointerController
-        .getTreeItem()
-        .getParameter('GlobalXfo')
-        .getValue();
+      const xfoB = this.pointerController.getTreeItem().getParameter('GlobalXfo').getValue();
       const headToCtrlA = xfoA.tr.subtract(headXfo.tr);
       const headToCtrlB = xfoB.tr.subtract(headXfo.tr);
       if (headToCtrlA.cross(headToCtrlB).dot(headXfo.ori.getYaxis()) > 0.0) {
@@ -6102,10 +6115,7 @@ class VRUITool extends BaseTool {
 
     if (this.uiController) {
       this.uiController.getTipItem().addChild(this.controllerUI, false);
-      if (this.pointerController)
-        this.pointerController
-          .getTipItem()
-          .addChild(this.__uiPointerItem, false);
+      if (this.pointerController) this.pointerController.getTipItem().addChild(this.__uiPointerItem, false);
 
       this.appData.session.pub('pose-message', {
         interfaceType: 'VR',
@@ -6129,9 +6139,7 @@ class VRUITool extends BaseTool {
     if (this.uiController) {
       this.uiController.getTipItem().removeChildByHandle(this.controllerUI);
       if (this.pointerController) {
-        this.pointerController
-          .getTipItem()
-          .removeChildByHandle(this.__uiPointerItem);
+        this.pointerController.getTipItem().removeChildByHandle(this.__uiPointerItem);
       }
 
       this.appData.session.pub('pose-message', {
@@ -6148,18 +6156,17 @@ class VRUITool extends BaseTool {
 
   /**
    * The setPointerLength method.
-   * @param {any} length - The length param.
+   * @param {number} length - The length param.
    */
   setPointerLength(length) {
     this.__pointerLocalXfo.sc.set(1, 1, length);
-    this.__uiPointerItem
-      .getParameter('LocalXfo')
-      .setValue(this.__pointerLocalXfo);
+    this.__uiPointerItem.getParameter('LocalXfo').setValue(this.__pointerLocalXfo);
   }
 
   /**
    * The calcUIIntersection method.
-   * @return {any} The return value.
+   *
+   * @return {object|undefined} The return value.
    */
   calcUIIntersection() {
     const pointerXfo = this.__uiPointerItem.getParameter('GlobalXfo').getValue();
@@ -6175,9 +6182,7 @@ class VRUITool extends BaseTool {
       this.setPointerLength(0.5);
       return
     }
-    const hitOffset = pointerXfo.tr
-      .add(pointervec.scale(res))
-      .subtract(plane.start);
+    const hitOffset = pointerXfo.tr.add(pointervec.scale(res)).subtract(plane.start);
     const x = hitOffset.dot(planeXfo.ori.getXaxis()) / planeSize.x;
     const y = hitOffset.dot(planeXfo.ori.getYaxis()) / planeSize.y;
     if (Math.abs(x) > 0.5 || Math.abs(y) > 0.5) {
@@ -6195,7 +6200,7 @@ class VRUITool extends BaseTool {
 
   /**
    * The sendEventToUI method.
-   * @param {any} eventName - The eventName param.
+   * @param {string} eventName - The eventName param.
    * @param {any} args - The args param.
    * @return {any} The return value.
    */
@@ -6206,39 +6211,22 @@ class VRUITool extends BaseTool {
       hit.offsetY = hit.pageY = hit.pageY = hit.screenY = hit.clientY;
       const element = document.elementFromPoint(hit.clientX, hit.clientY);
       if (element != this._element) {
-        if (this._element)
-          this.controllerUI.sendMouseEvent(
-            'mouseleave',
-            Object.assign(args, hit),
-            this._element
-          );
+        if (this._element) this.controllerUI.sendMouseEvent('mouseleave', Object.assign(args, hit), this._element);
         this._element = element;
-        this.controllerUI.sendMouseEvent(
-          'mouseenter',
-          Object.assign(args, hit),
-          this._element
-        );
+        this.controllerUI.sendMouseEvent('mouseenter', Object.assign(args, hit), this._element);
       }
-      this.controllerUI.sendMouseEvent(
-        eventName,
-        Object.assign(args, hit),
-        this._element
-      );
+      this.controllerUI.sendMouseEvent(eventName, Object.assign(args, hit), this._element);
       return this._element
     } else if (this._element) {
-      this.controllerUI.sendMouseEvent(
-        'mouseleave',
-        Object.assign(args, hit),
-        this._element
-      );
+      this.controllerUI.sendMouseEvent('mouseleave', Object.assign(args, hit), this._element);
       this._element = null;
     }
   }
 
   /**
    * The onVRControllerButtonDown method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * @param {object} event - The event param.
+   * @return {boolean} The return value.
    */
   onVRControllerButtonDown(event) {
     if (event.controller == this.pointerController) {
@@ -6259,8 +6247,8 @@ class VRUITool extends BaseTool {
 
   /**
    * The onVRControllerButtonUp method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * @param {object} event - The event param.
+   * @return {boolean} The return value.
    */
   onVRControllerButtonUp(event) {
     if (event.controller == this.pointerController) {
@@ -6282,8 +6270,8 @@ class VRUITool extends BaseTool {
 
   /**
    * The onVRPoseChanged method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * @param {object} event - The event param.
+   * @return {boolean} The return value.
    */
   onVRPoseChanged(event) {
     // Controller coordinate system
@@ -6292,10 +6280,7 @@ class VRUITool extends BaseTool {
     // Z = Towards handle base.
     const headXfo = event.viewXfo;
     const checkControllers = () => {
-      const xfoA = this.uiController
-        .getTreeItem()
-        .getParameter('GlobalXfo')
-        .getValue();
+      const xfoA = this.uiController.getTreeItem().getParameter('GlobalXfo').getValue();
       const headToCtrlA = xfoA.tr.subtract(headXfo.tr);
       headToCtrlA.normalizeInPlace();
       if (headToCtrlA.angleTo(xfoA.ori.getYaxis()) > Math.PI * 0.5) {
@@ -6322,12 +6307,14 @@ class VRUITool extends BaseTool {
 
 /**
  * Class representing a hold objects change.
+ *
  * @extends Change
  */
 class HoldObjectsChange extends Change {
   /**
    * Create a hold objects change.
-   * @param {any} data - The data value.
+   *
+   * @param {object} data - The data value.
    */
   constructor(data) {
     super('HoldObjectsChange');
@@ -6345,9 +6332,7 @@ class HoldObjectsChange extends Change {
   undo() {
     for (let i = 0; i < this.__selection.length; i++) {
       if (this.__selection[i]) {
-        this.__selection[i]
-          .getParameter('GlobalXfo')
-          .setValue(this.__prevXfos[i]);
+        this.__selection[i].getParameter('GlobalXfo').setValue(this.__prevXfos[i]);
       }
     }
   }
@@ -6358,30 +6343,24 @@ class HoldObjectsChange extends Change {
   redo() {
     for (let i = 0; i < this.__selection.length; i++) {
       if (this.__selection[i]) {
-        this.__selection[i]
-          .getParameter('GlobalXfo')
-          .setValue(this.__newXfos[i]);
+        this.__selection[i].getParameter('GlobalXfo').setValue(this.__newXfos[i]);
       }
     }
   }
 
   /**
    * The update method.
-   * @param {any} updateData - The updateData param.
+   * @param {object} updateData - The updateData param.
    */
   update(updateData) {
     if (updateData.newItem) {
       this.__selection[updateData.newItemId] = updateData.newItem;
-      this.__prevXfos[updateData.newItemId] = updateData.newItem
-        .getParameter('GlobalXfo')
-        .getValue();
+      this.__prevXfos[updateData.newItemId] = updateData.newItem.getParameter('GlobalXfo').getValue();
     } else if (updateData.changeXfos) {
       for (let i = 0; i < updateData.changeXfoIds.length; i++) {
         const gidx = updateData.changeXfoIds[i];
         if (!this.__selection[gidx]) continue
-        this.__selection[gidx]
-          .getParameter('GlobalXfo')
-          .setValue(updateData.changeXfos[i]);
+        this.__selection[gidx].getParameter('GlobalXfo').setValue(updateData.changeXfos[i]);
         this.__newXfos[gidx] = updateData.changeXfos[i];
       }
     }
@@ -6390,8 +6369,8 @@ class HoldObjectsChange extends Change {
 
   /**
    * The toJSON method.
-   * @param {any} context - The context param.
-   * @return {any} The return value.
+   * @param {object} context - The context param.
+   * @return {object} The return value.
    */
   toJSON(context) {
     const j = super.toJSON(context);
@@ -6411,8 +6390,8 @@ class HoldObjectsChange extends Change {
 
   /**
    * The fromJSON method.
-   * @param {any} j - The j param.
-   * @param {any} context - The context param.
+   * @param {object} j - The j param.
+   * @param {object} context - The context param.
    */
   fromJSON(j, context) {
     super.fromJSON(j, context);
@@ -6458,7 +6437,7 @@ UndoRedoManager.registerChange('HoldObjectsChange', HoldObjectsChange);
 class VRHoldObjectsTool extends BaseTool {
   /**
    * Create a VR hold objects tool.
-   * @param {any} appData - The appData value.
+   * @param {object} appData - The appData value.
    */
   constructor(appData) {
     super(appData);
@@ -6496,12 +6475,8 @@ class VRHoldObjectsTool extends BaseTool {
     };
 
     this.appData.renderer.getXRViewport().then((xrvp) => {
-      for (const controller of xrvp.getControllers())
-        addIconToController(controller);
-      this.addIconToControllerId = xrvp.on(
-        'controllerAdded',
-        addIconToController
-      );
+      for (const controller of xrvp.getControllers()) addIconToController(controller);
+      this.addIconToControllerId = xrvp.on('controllerAdded', addIconToController);
     });
   }
 
@@ -6524,8 +6499,8 @@ class VRHoldObjectsTool extends BaseTool {
 
   /**
    * The computeGrabXfo method.
-   * @param {any} refs - The refs param.
-   * @return {any} The return value.
+   * @param {array} refs - The refs param.
+   * @return {Xfo} The return value.
    */
   computeGrabXfo(refs) {
     let grabXfo;
@@ -6566,16 +6541,14 @@ class VRHoldObjectsTool extends BaseTool {
       const heldGeom = this.__heldGeomItems[i];
       if (!heldGeom) continue
       const grabXfo = this.computeGrabXfo(this.__heldGeomItemRefs[i]);
-      this.__heldGeomItemOffsets[i] = grabXfo
-        .inverse()
-        .multiply(heldGeom.getParameter('GlobalXfo').getValue());
+      this.__heldGeomItemOffsets[i] = grabXfo.inverse().multiply(heldGeom.getParameter('GlobalXfo').getValue());
     }
   }
 
   /**
    * The onVRControllerButtonDown method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * @param {object} event - The event param.
+   * @return {boolean} The return value.
    */
   onVRControllerButtonDown(event) {
     const id = event.controller.getId();
@@ -6620,8 +6593,8 @@ class VRHoldObjectsTool extends BaseTool {
 
   /**
    * The onVRControllerButtonUp method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * @param {object} event - The event param.
+   * @return {boolean} The return value.
    */
   onVRControllerButtonUp(event) {
     const id = event.controller.getId();
@@ -6645,8 +6618,8 @@ class VRHoldObjectsTool extends BaseTool {
 
   /**
    * The onVRPoseChanged method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * @param {object} event - The event param.
+   * @return {boolean} The return value.
    */
   onVRPoseChanged(event) {
     if (!this.change) return false
@@ -6668,21 +6641,24 @@ class VRHoldObjectsTool extends BaseTool {
 }
 
 /**
- * Class representing base create tool.
+ * Class representing a primary create tool.
+ *
  * @extends BaseTool
  */
 class BaseCreateTool extends BaseTool {
   /**
-   * Create a base create tool.
-   * @param {any} appData - The appData value.
+   * Creates an instance of BaseCreateTool.
+   *
+   * @param {object} appData - The appData value.
    */
   constructor(appData) {
     super(appData);
   }
 
   /**
-   * The isPrimaryTool method.
-   * @return {any} The return value.
+   * Checks if the tool is a primary tool or not.
+   *
+   * @return {boolean} - Returns `true`.
    */
   isPrimaryTool() {
     return true
@@ -6690,98 +6666,15 @@ class BaseCreateTool extends BaseTool {
 }
 
 /**
- * Class representing a create geom change.
- * @extends Change
- */
-class CreateGeomChange extends Change {
-  /**
-   * Create a create circle change.
-   * @param {any} name - The name value.
-   */
-  constructor(name) {
-    super(name);
-  }
-
-  /**
-   * The setParentAndXfo method.
-   * @param {any} parentItem - The parentItem param.
-   * @param {any} xfo - The xfo param.
-   */
-  setParentAndXfo(parentItem, xfo) {
-    this.parentItem = parentItem;
-    const name = this.parentItem.generateUniqueName(this.geomItem.getName());
-    this.geomItem.setName(name);
-    this.geomItem.getParameter('GlobalXfo').setValue(xfo);
-    this.childIndex = this.parentItem.addChild(this.geomItem, true);
-
-    this.geomItem.addRef(this); // keep a ref to stop it being destroyed
-  }
-
-  /**
-   * The undo method.
-   */
-  undo() {
-    this.parentItem.removeChild(this.childIndex);
-  }
-
-  /**
-   * The redo method.
-   */
-  redo() {
-    this.parentItem.addChild(this.geomItem, false, false);
-  }
-
-  /**
-   * The toJSON method.
-   * @param {any} appData - The appData param.
-   * @return {any} The return value.
-   */
-  toJSON(context) {
-    const j = super.toJSON(context);
-    j.parentItemPath = this.parentItem.getPath();
-    j.geomItemName = this.geomItem.getName();
-    j.geomItemXfo = this.geomItem.getParameter('LocalXfo').getValue();
-    return j
-  }
-
-  /**
-   * The fromJSON method.
-   * @param {any} j - The j param.
-   * @param {any} appData - The appData param.
-   */
-  fromJSON(j, context) {
-    const sceneRoot = context.appData.scene.getRoot();
-    this.parentItem = sceneRoot.resolvePath(j.parentItemPath, 1);
-    this.geomItem.setName(this.parentItem.generateUniqueName(j.geomItemName));
-    const xfo = new zeaEngine.Xfo();
-    xfo.fromJSON(j.geomItemXfo);
-    this.geomItem.getParameter('LocalXfo').setValue(xfo);
-    this.childIndex = this.parentItem.addChild(this.geomItem, false);
-  }
-
-  // changeFromJSON(j) {
-  //   if (this.__newValue.fromJSON)
-  //     this.__newValue.fromJSON(j.value);
-  //   else
-  //     this.__newValue = j.value;
-  // }
-
-  /**
-   * The destroy method.
-   */
-  destroy() {
-    this.geomItem.removeRef(this); // remove the tmp ref.
-  }
-}
-
-/**
- * Class representing a create geom tool.
+ * Base class for creating geometry tools.
+ *
  * @extends BaseCreateTool
  */
 class CreateGeomTool extends BaseCreateTool {
   /**
    * Create a create geom tool.
-   * @param {any} appData - The appData value.
+   *
+   * @param {object} appData - The appData value.
    */
   constructor(appData) {
     super(appData);
@@ -6789,9 +6682,7 @@ class CreateGeomTool extends BaseCreateTool {
     this.stage = 0;
     this.removeToolOnRightClick = true;
 
-    this.cp = this.addParameter(
-      new zeaEngine.ColorParameter('Line Color', new zeaEngine.Color(0.7, 0.2, 0.2))
-    );
+    this.cp = this.addParameter(new zeaEngine.ColorParameter('Line Color', new zeaEngine.Color(0.7, 0.2, 0.2)));
   }
 
   /**
@@ -6805,31 +6696,19 @@ class CreateGeomTool extends BaseCreateTool {
     this.appData.renderer.getXRViewport().then((xrvp) => {
       if (!this.vrControllerToolTip) {
         this.vrControllerToolTip = new zeaEngine.Cross(0.05);
-        this.vrControllerToolTipMat = new zeaEngine.Material(
-          'VRController Cross',
-          'LinesShader'
-        );
-        this.vrControllerToolTipMat
-          .getParameter('Color')
-          .setValue(this.cp.getValue());
+        this.vrControllerToolTipMat = new zeaEngine.Material('VRController Cross', 'LinesShader');
+        this.vrControllerToolTipMat.getParameter('Color').setValue(this.cp.getValue());
         this.vrControllerToolTipMat.visibleInGeomDataBuffer = false;
       }
       const addIconToController = (controller) => {
-        const geomItem = new zeaEngine.GeomItem(
-          'CreateGeomToolTip',
-          this.vrControllerToolTip,
-          this.vrControllerToolTipMat
-        );
+        const geomItem = new zeaEngine.GeomItem('CreateGeomToolTip', this.vrControllerToolTip, this.vrControllerToolTipMat);
         controller.getTipItem().removeAllChildren();
         controller.getTipItem().addChild(geomItem, false);
       };
       for (const controller of xrvp.getControllers()) {
         addIconToController(controller);
       }
-      this.addIconToControllerId = xrvp.on(
-        'controllerAdded',
-        addIconToController
-      );
+      this.addIconToControllerId = xrvp.on('controllerAdded', addIconToController);
     });
   }
 
@@ -6850,21 +6729,17 @@ class CreateGeomTool extends BaseCreateTool {
   }
 
   /**
-   * The screenPosToXfo method.
-   * @param {any} screenPos - The screenPos param.
-   * @param {any} viewport - The viewport param.
-   * @return {any} The return value.
+   * Transforms the screen position in the viewport to an Xfo object.
+   *
+   * @param {Vec2} screenPos - The screenPos param.
+   * @param {GLViewport} viewport - The viewport param.
+   * @return {Xfo} The return value.
    */
   screenPosToXfo(screenPos, viewport) {
-    //
-
     const ray = viewport.calcRayFromScreenPos(screenPos);
 
     // Raycast any working planes.
-    const planeRay = new zeaEngine.Ray(
-      this.constructionPlane.tr,
-      this.constructionPlane.ori.getZaxis()
-    );
+    const planeRay = new zeaEngine.Ray(this.constructionPlane.tr, this.constructionPlane.ori.getZaxis());
     const dist = ray.intersectRayPlane(planeRay);
     if (dist > 0.0) {
       const xfo = this.constructionPlane.clone();
@@ -6880,9 +6755,10 @@ class CreateGeomTool extends BaseCreateTool {
   }
 
   /**
-   * The createStart method.
-   * @param {any} xfo - The xfo param.
-   * @param {any} parentItem - The parentItem param.
+   * Starts the creation of the geometry.
+   *
+   * @param {Xfo} xfo - The xfo param.
+   * @param {TreeItem} parentItem - The parentItem param.
    */
   createStart(xfo, parentItem) {
     this.stage = 1;
@@ -6890,29 +6766,39 @@ class CreateGeomTool extends BaseCreateTool {
 
   /**
    * The createPoint method.
-   * @param {any} pt - The pt param.
+   *
+   * @param {Vec3} pt - The pt param.
    */
-  createPoint(pt) {}
+  createPoint(pt) {
+    // console.warn('Implement me')
+  }
 
   /**
    * The createMove method.
-   * @param {any} pt - The pt param.
+   *
+   * @param {Vec3} pt - The pt param.
    */
-  createMove(pt) {}
+  createMove(pt) {
+    // console.warn('Implement me')
+  }
 
   /**
    * The createRelease method.
-   * @param {any} pt - The pt param.
+   *
+   * @param {Vec3} pt - The pt param.
    */
-  createRelease(pt) {}
+  createRelease(pt) {
+    // console.warn('Implement me')
+  }
 
   // ///////////////////////////////////
   // Mouse events
 
   /**
-   * The onMouseDown method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * Event fired when a pointing device button is pressed over the viewport while the tool is activated.
+   *
+   * @param {MouseEvent} event - The event param.
+   * @return {boolean} The return value.
    */
   onMouseDown(event) {
     //
@@ -6924,8 +6810,7 @@ class CreateGeomTool extends BaseCreateTool {
         this.createStart(xfo, this.appData.scene.getRoot());
       } else if (event.button == 2) {
         // Cancel the tool.
-        if (this.removeToolOnRightClick)
-          this.appData.toolManager.removeTool(this.index);
+        if (this.removeToolOnRightClick) this.appData.toolManager.removeTool(this.index);
       }
       return true
     } else if (event.button == 2) {
@@ -6937,9 +6822,10 @@ class CreateGeomTool extends BaseCreateTool {
   }
 
   /**
-   * The onMouseMove method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * Event fired when a pointing device is moved while the cursor's hotspot is inside the viewport, while tool is activated.
+   *
+   * @param {MouseEvent} event - The event param.
+   * @return {boolean} The return value.
    */
   onMouseMove(event) {
     if (this.stage > 0) {
@@ -6950,9 +6836,10 @@ class CreateGeomTool extends BaseCreateTool {
   }
 
   /**
-   * The onMouseUp method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * Event fired when a pointing device button is released while the pointer is over the viewport, while the tool is activated.
+   *
+   * @param {MouseEvent} event - The event param.
+   * @return {boolean} The return value.
    */
   onMouseUp(event) {
     if (this.stage > 0) {
@@ -6963,69 +6850,91 @@ class CreateGeomTool extends BaseCreateTool {
   }
 
   /**
-   * The onWheel method.
-   * @param {any} event - The event param.
+   * Event fired when the user rotates the pointing device wheel, while the tool is activated.
+   *
+   * @param {MouseEvent} event - The event param.
    */
-  onWheel(event) {}
+  onWheel(event) {
+    // console.warn('Implement me')
+  }
 
   // ///////////////////////////////////
   // Keyboard events
 
   /**
-   * The onKeyPressed method.
-   * @param {any} key - The key param.
-   * @param {any} event - The event param.
+   * Event fired when the user presses a key on the keyboard, while the tool is activated.
+   *
+   * @param {KeyboardEvent} event - The event param.
    */
-  onKeyPressed(event) {}
+  onKeyPressed(event) {
+    // console.warn('Implement me')
+  }
 
   /**
-   * The onKeyDown method.
-   * @param {any} key - The key param.
-   * @param {any} event - The event param.
+   * Event fired when the user presses down a key on the keyboard, while the tool is activated.
+   *
+   * @param {KeyboardEvent} event - The event param.
    */
-  onKeyDown(event) {}
+  onKeyDown(event) {
+    // console.warn('Implement me')
+  }
 
   /**
-   * The onKeyUp method.
-   * @param {any} key - The key param.
-   * @param {any} event - The event param.
+   * Event fired when the user releases a key on the keyboard.
+   *
+   * @param {KeyboardEvent} event - The event param.
    */
-  onKeyUp(event) {}
+  onKeyUp(event) {
+    // console.warn('Implement me')
+  }
 
   // ///////////////////////////////////
   // Touch events
 
   /**
-   * The onTouchStart method.
-   * @param {any} event - The event param.
+   * Event fired when one or more touch points are placed on the touch surface inside the viewport, when the tool is activated.
+   *
+   * @param {TouchEvent} event - The event param.
    */
-  onTouchStart(event) {}
+  onTouchStart(event) {
+    // console.warn('Implement me')
+  }
 
   /**
-   * The onTouchMove method.
-   * @param {any} event - The event param.
+   * Event fired when the one or more touch points are moved along the touch surface inside the viewport, when the tool is activated.
+   *
+   * @param {TouchEvent} event - The event param.
    */
-  onTouchMove(event) {}
+  onTouchMove(event) {
+    // console.warn('Implement me')
+  }
 
   /**
-   * The onTouchEnd method.
-   * @param {any} event - The event param.
+   * Event fired when one or more touch points are removed from the touch surface inside the viewport, when the tool is activated.
+   *
+   * @param {TouchEvent} event - The event param.
    */
-  onTouchEnd(event) {}
+  onTouchEnd(event) {
+    // console.warn('Implement me')
+  }
 
   /**
-   * The onTouchCancel method.
-   * @param {any} event - The event param.
+   * Event fired when one or more touch points have been disrupted in an implementation-specific manner inside the viewport, when the tool is activated.
+   *
+   * @param {TouchEvent} event - The event param.
    */
-  onTouchCancel(event) {}
+  onTouchCancel(event) {
+    // console.warn('Implement me')
+  }
 
   // ///////////////////////////////////
   // VRController events
 
   /**
-   * The onVRControllerButtonDown method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * Event fired when a VR controller button is pressed inside the viewport, when the tool is activated.
+   *
+   * @param {object} event - The event param.
+   * @return {boolean} The return value.
    */
   onVRControllerButtonDown(event) {
     if (!this.__activeController) {
@@ -7041,8 +6950,9 @@ class CreateGeomTool extends BaseCreateTool {
 
   /**
    * The onVRPoseChanged method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   *
+   * @param {object} event - The event param.
+   * @return {boolean} The return value.
    */
   onVRPoseChanged(event) {
     if (this.__activeController && this.stage > 0) {
@@ -7054,9 +6964,10 @@ class CreateGeomTool extends BaseCreateTool {
   }
 
   /**
-   * The onVRControllerButtonUp method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * Event fired when a VR controller button is released inside the viewport, when the tool is activated.
+   *
+   * @param {object} event - The event param.
+   * @return {boolean} The return value.
    */
   onVRControllerButtonUp(event) {
     if (this.stage > 0) {
@@ -7071,16 +6982,109 @@ class CreateGeomTool extends BaseCreateTool {
 }
 
 /**
+ * Class representing a create geom change.
+ *
+ * @extends Change
+ */
+class CreateGeomChange extends Change {
+  /**
+   * Create a create circle change.
+   * @param {string} name - The name value.
+   */
+  constructor(name) {
+    super(name);
+  }
+
+  /**
+   * The setParentAndXfo method.
+   * @param {TreeItem} parentItem - The parentItem param.
+   * @param {Xfo} xfo - The xfo param.
+   */
+  setParentAndXfo(parentItem, xfo) {
+    this.parentItem = parentItem;
+    const name = this.parentItem.generateUniqueName(this.geomItem.getName());
+    this.geomItem.setName(name);
+    this.geomItem.getParameter('GlobalXfo').setValue(xfo);
+    this.childIndex = this.parentItem.addChild(this.geomItem, true);
+
+    this.geomItem.addRef(this); // keep a ref to stop it being destroyed
+  }
+
+  /**
+   * Removes recently created geometry from its parent.
+   */
+  undo() {
+    this.parentItem.removeChild(this.childIndex);
+  }
+
+  /**
+   * Restores recently created geometry and adds it to the specified parent tree item.
+   */
+  redo() {
+    this.parentItem.addChild(this.geomItem, false, false);
+  }
+
+  /**
+   * Serializes the change as a JSON object.
+   *
+   * @param {object} context - The context value
+   * @return {object} - The serialized change
+   */
+  toJSON(context) {
+    const j = super.toJSON(context);
+    j.parentItemPath = this.parentItem.getPath();
+    j.geomItemName = this.geomItem.getName();
+    j.geomItemXfo = this.geomItem.getParameter('LocalXfo').getValue();
+    return j
+  }
+
+  /**
+   * Restores geometry from using the specified JSON
+   *
+   * @param {object} j - The j param.
+   * @param {object} context - The appData param.
+   */
+  fromJSON(j, context) {
+    const sceneRoot = context.appData.scene.getRoot();
+    this.parentItem = sceneRoot.resolvePath(j.parentItemPath, 1);
+    this.geomItem.setName(this.parentItem.generateUniqueName(j.geomItemName));
+    const xfo = new zeaEngine.Xfo();
+    xfo.fromJSON(j.geomItemXfo);
+    this.geomItem.getParameter('LocalXfo').setValue(xfo);
+    this.childIndex = this.parentItem.addChild(this.geomItem, false);
+  }
+
+  // changeFromJSON(j) {
+  //   if (this.__newValue.fromJSON)
+  //     this.__newValue.fromJSON(j.value);
+  //   else
+  //     this.__newValue = j.value;
+  // }
+
+  /**
+   * Removes geometry item reference from change change.
+   */
+  destroy() {
+    this.geomItem.removeRef(this); // remove the tmp ref.
+  }
+}
+
+/**
  * Class representing a create line change.
+ *
+ * **Events**
+ * * **updated:** Triggered when the change is updated
+ *
  * @extends CreateGeomChange
  */
 class CreateLineChange extends CreateGeomChange {
   /**
    * Create a create line change.
-   * @param {any} parentItem - The parentItem value.
-   * @param {any} xfo - The xfo value.
-   * @param {any} color - The color value.
-   * @param {any} thickness - The thickness value.
+   *
+   * @param {TreeItem} parentItem - The parentItem value.
+   * @param {Xfo} xfo - The xfo value.
+   * @param {Color} color - The color value.
+   * @param {number} thickness - The thickness value.
    */
   constructor(parentItem, xfo, color, thickness) {
     super('Create Line');
@@ -7110,8 +7114,9 @@ class CreateLineChange extends CreateGeomChange {
   }
 
   /**
-   * The update method.
-   * @param {any} updateData - The updateData param.
+   * Updates Line using the specified data.
+   *
+   * @param {object} updateData - The updateData param.
    */
   update(updateData) {
     if (updateData.p1) {
@@ -7122,9 +7127,10 @@ class CreateLineChange extends CreateGeomChange {
   }
 
   /**
-   * The fromJSON method.
-   * @param {any} j - The j param.
-   * @param {any} context - The context param.
+   * Restores line geometry using a JSON object.
+   *
+   * @param {object} j - The j param.
+   * @param {object} context - The context param.
    */
   fromJSON(j, context) {
     super.fromJSON(j, context);
@@ -7140,10 +7146,15 @@ class CreateLineChange extends CreateGeomChange {
     }
   }
 }
+
 UndoRedoManager.registerChange('CreateLineChange', CreateLineChange);
 
 /**
- * Class representing a create line tool.
+ * Tool for creating a line tool.
+ *
+ * **Events**
+ * * **actionFinished:** Triggered when the creation of the geometry is completed.
+ *
  * @extends CreateGeomTool
  */
 class CreateLineTool extends CreateGeomTool {
@@ -7154,9 +7165,7 @@ class CreateLineTool extends CreateGeomTool {
   constructor(appData) {
     super(appData);
 
-    this.tp = this.addParameter(
-      new zeaEngine.NumberParameter('Line Thickness', 0.06, [0, 0.1])
-    ); // 1cm.
+    this.tp = this.addParameter(new zeaEngine.NumberParameter('Line Thickness', 0.06, [0, 0.1])); // 1cm.
   }
 
   // activateTool() {
@@ -7200,9 +7209,10 @@ class CreateLineTool extends CreateGeomTool {
   // }
 
   /**
-   * The createStart method.
-   * @param {any} xfo - The xfo param.
-   * @param {any} parentItem - The parentItem param.
+   * Starts line geometry creation.
+   *
+   * @param {Xfo} xfo - The xfo param.
+   * @param {TreeItem} parentItem - The parentItem param.
    */
   createStart(xfo, parentItem) {
     this.change = new CreateLineChange(parentItem, xfo);
@@ -7214,8 +7224,9 @@ class CreateLineTool extends CreateGeomTool {
   }
 
   /**
-   * The createMove method.
-   * @param {any} pt - The pt param.
+   * Updates line structural data.
+   *
+   * @param {Vec3} pt - The pt param.
    */
   createMove(pt) {
     const offet = this.xfo.transformVec3(pt);
@@ -7224,8 +7235,9 @@ class CreateLineTool extends CreateGeomTool {
   }
 
   /**
-   * The createRelease method.
-   * @param {any} pt - The pt param.
+   * Finishes Line geometry creation.
+   *
+   * @param {Vec3} pt - The pt param.
    */
   createRelease(pt) {
     if (this.length == 0) {
@@ -7238,20 +7250,24 @@ class CreateLineTool extends CreateGeomTool {
 
 /**
  * Class representing a create circle change.
+ *
+ * **Events**
+ * * **updated:** Triggered when the change is updated
+ *
  * @extends CreateGeomChange
  */
 class CreateCircleChange extends CreateGeomChange {
   /**
-   * Create a create circle change.
-   * @param {any} parentItem - The parentItem value.
-   * @param {any} xfo - The xfo value.
+   * Creates an instance of CreateCircleChange.
+   *
+   * @param {TreeItem} parentItem - The parentItem value.
+   * @param {Xfo} xfo - The xfo value.
    */
   constructor(parentItem, xfo) {
-    super('Create Circle', parentItem);
+    super('Create Circle');
 
     this.circle = new zeaEngine.Circle(0, 64);
     this.circle.lineThickness = 0.05;
-    // const material = new Material('circle', 'LinesShader');
     const material = new zeaEngine.Material('circle', 'FatLinesShader');
     material.getParameter('Color').setValue(new zeaEngine.Color(0.7, 0.2, 0.2));
     this.geomItem = new zeaEngine.GeomItem('Circle');
@@ -7264,8 +7280,9 @@ class CreateCircleChange extends CreateGeomChange {
   }
 
   /**
-   * The update method.
-   * @param {any} updateData - The updateData param.
+   * Updates circle with the specified data.
+   *
+   * @param {object} updateData - The updateData param.
    */
   update(updateData) {
     this.circle.getParameter('Radius').setValue(updateData.radius);
@@ -7273,8 +7290,9 @@ class CreateCircleChange extends CreateGeomChange {
   }
 
   /**
-   * The toJSON method.
-   * @return {any} The return value.
+   * Serializes change as a JSON object.
+   *
+   * @return {object} - The return value.
    */
   toJSON() {
     const j = super.toJSON();
@@ -7283,33 +7301,40 @@ class CreateCircleChange extends CreateGeomChange {
   }
 
   /**
-   * The changeFromJSON method.
-   * @param {any} j - The j param.
+   * Updates circle with the specified JSON
+   *
+   * @param {object} j - The j param.
    */
   changeFromJSON(j) {
     console.log('CreateCircleChange:', j);
     if (j.radius) this.circle.getParameter('Radius').setValue(j.radius);
   }
 }
+
 UndoRedoManager.registerChange('CreateCircleChange', CreateCircleChange);
 
 /**
- * Class representing a create circle tool.
+ * Tool for creating a circle geometry.
+ *
+ * **Events**
+ * * **actionFinished:** Triggered when the creation of the geometry is completed.
+ *
  * @extends CreateGeomTool
  */
 class CreateCircleTool extends CreateGeomTool {
   /**
    * Create a create circle tool.
-   * @param {any} appData - The appData value.
+   * @param {object} appData - The appData value.
    */
   constructor(appData) {
     super(appData);
   }
 
   /**
-   * The createStart method.
-   * @param {any} xfo - The xfo param.
-   * @param {any} parentItem - The parentItem param.
+   * Starts the creation of the geometry.
+   *
+   * @param {Xfo} xfo - The xfo param.
+   * @param {TreeItem} parentItem - The parentItem param.
    */
   createStart(xfo, parentItem) {
     this.change = new CreateCircleChange(parentItem, xfo);
@@ -7321,8 +7346,9 @@ class CreateCircleTool extends CreateGeomTool {
   }
 
   /**
-   * The createMove method.
-   * @param {any} pt - The pt param.
+   * Updates Circle geometry radius.
+   *
+   * @param {Vec3} pt - The pt param.
    */
   createMove(pt) {
     this.radius = pt.distanceTo(this.xfo.tr);
@@ -7330,8 +7356,9 @@ class CreateCircleTool extends CreateGeomTool {
   }
 
   /**
-   * The createRelease method.
-   * @param {any} pt - The pt param.
+   * Finishes geometry creation.
+   *
+   * @param {Vec3} pt - The pt param.
    */
   createRelease(pt) {
     if (this.radius == 0) {
@@ -7345,13 +7372,18 @@ class CreateCircleTool extends CreateGeomTool {
 
 /**
  * Class representing a create rect change.
+ *
+ * **Events**
+ * * **updated:** Triggered when the change is updated
+ *
  * @extends CreateGeomChange
  */
 class CreateRectChange extends CreateGeomChange {
   /**
    * Create a create rect change.
-   * @param {any} parentItem - The parentItem value.
-   * @param {any} xfo - The xfo value.
+   *
+   * @param {TreeItem} parentItem - The parentItem value.
+   * @param {Xfo} xfo - The xfo value.
    */
   constructor(parentItem, xfo) {
     super('Create Rect');
@@ -7371,8 +7403,9 @@ class CreateRectChange extends CreateGeomChange {
   }
 
   /**
-   * The update method.
-   * @param {any} updateData - The updateData param.
+   * Updates rectangle with the specified data.
+   *
+   * @param {object} updateData - The updateData param.
    */
   update(updateData) {
     if (updateData.baseSize) {
@@ -7387,25 +7420,31 @@ class CreateRectChange extends CreateGeomChange {
     this.emit('updated', updateData);
   }
 }
+
 UndoRedoManager.registerChange('CreateRectChange', CreateRectChange);
 
 /**
- * Class representing a create rect tool.
+ * Tool for creating a rectangle geometry.
+ *
+ * **Events**
+ * * **actionFinished:** Triggered when the creation of the geometry is completed.
+ *
  * @extends CreateGeomTool
  */
 class CreateRectTool extends CreateGeomTool {
   /**
    * Create a create rect tool.
-   * @param {any} appData - The appData value.
+   * @param {object} appData - The appData value.
    */
   constructor(appData) {
     super(appData);
   }
 
   /**
-   * The createStart method.
-   * @param {any} xfo - The xfo param.
-   * @param {any} parentItem - The parentItem param.
+   * Starts the creation of a rectangle geometry.
+   *
+   * @param {Xfo} xfo - The xfo param.
+   * @param {TreeItem} parentItem - The parentItem param.
    */
   createStart(xfo, parentItem) {
     this.change = new CreateRectChange(parentItem, xfo);
@@ -7418,8 +7457,9 @@ class CreateRectTool extends CreateGeomTool {
   }
 
   /**
-   * The createMove method.
-   * @param {any} pt - The pt param.
+   * Updated the rectangle geometry structural properties.
+   *
+   * @param {Vec3} pt - The pt param.
    */
   createMove(pt) {
     if (this.stage == 1) {
@@ -7439,9 +7479,10 @@ class CreateRectTool extends CreateGeomTool {
   }
 
   /**
-   * The createRelease method.
-   * @param {any} pt - The pt param.
-   * @param {any} viewport - The viewport param.
+   * Finishes the creation of a rectangle geometry.
+   *
+   * @param {Vec3} pt - The pt param.
+   * @param {GLViewport} viewport - The viewport param.
    */
   createRelease(pt, viewport) {
     if (this._size == 0) {
@@ -7454,15 +7495,20 @@ class CreateRectTool extends CreateGeomTool {
 
 /**
  * Class representing a create freehand line change.
+ *
+ * **Events**
+ * * **updated:** Triggered when the change is updated
+ *
  * @extends CreateGeomChange
  */
 class CreateFreehandLineChange extends CreateGeomChange {
   /**
    * Create a create freehand line change.
-   * @param {any} parentItem - The parentItem value.
-   * @param {any} xfo - The xfo value.
-   * @param {any} color - The color value.
-   * @param {any} thickness - The thickness value.
+   *
+   * @param {TreeItem} parentItem - The parentItem value.
+   * @param {Xfo} xfo - The xfo value.
+   * @param {Color} color - The color value.
+   * @param {number} thickness - The thickness value.
    */
   constructor(parentItem, xfo, color, thickness) {
     super('Create Freehand Line');
@@ -7499,8 +7545,9 @@ class CreateFreehandLineChange extends CreateGeomChange {
   }
 
   /**
-   * The update method.
-   * @param {any} updateData - The updateData param.
+   * Updates free hand line using the specified data.
+   *
+   * @param {object} updateData - The updateData param.
    */
   update(updateData) {
     // console.log("update:", this.used)
@@ -7532,9 +7579,10 @@ class CreateFreehandLineChange extends CreateGeomChange {
   }
 
   /**
-   * The toJSON method.
-   * @param {any} appData - The appData param.
-   * @return {any} The return value.
+   * Serializes change as a JSON object.
+   *
+   * @param {object} context - The appData param.
+   * @return {object} The return value.
    */
   toJSON(context) {
     const j = super.toJSON(context);
@@ -7544,9 +7592,10 @@ class CreateFreehandLineChange extends CreateGeomChange {
   }
 
   /**
-   * The fromJSON method.
-   * @param {any} j - The j param.
-   * @param {any} appData - The appData param.
+   * Restores free hand line from a JSON object.
+   *
+   * @param {object} j - The j param.
+   * @param {object} context - The appData param.
    */
   fromJSON(j, context) {
     // Need to set line thickness before the geom is added to the tree.
@@ -7564,42 +7613,39 @@ class CreateFreehandLineChange extends CreateGeomChange {
     super.fromJSON(j, context);
   }
 }
-UndoRedoManager.registerChange(
-  'CreateFreehandLineChange',
-  CreateFreehandLineChange
-);
+
+UndoRedoManager.registerChange('CreateFreehandLineChange', CreateFreehandLineChange);
 
 /**
- * Class representing a create freehand line tool.
+ * Tool for creating a free hand line.
+ *
+ * **Events**
+ * * **actionFinished:** Triggered when the creation of the geometry is completed.
+ *
  * @extends CreateLineTool
  */
 class CreateFreehandLineTool extends CreateLineTool {
   /**
    * Create a create freehand line tool.
-   * @param {any} appData - The appData value.
+   *
+   * @param {object} appData - The appData value.
    */
   constructor(appData) {
     super(appData);
 
-    this.mp = this.addParameter(
-      new zeaEngine.BooleanParameter('Modulate Thickness By Stroke Speed', false)
-    );
+    this.mp = this.addParameter(new zeaEngine.BooleanParameter('Modulate Thickness By Stroke Speed', false));
   }
 
   /**
-   * The createStart method.
-   * @param {any} xfo - The xfo param.
-   * @param {any} parentItem - The parentItem param.
+   * Starts the creation of a free hand line.
+   *
+   * @param {Xfo} xfo - The xfo param.
+   * @param {TreeItem} parentItem - The parentItem param.
    */
   createStart(xfo, parentItem) {
     const color = this.cp.getValue();
     const lineThickness = this.tp.getValue();
-    this.change = new CreateFreehandLineChange(
-      parentItem,
-      xfo,
-      color,
-      lineThickness
-    );
+    this.change = new CreateFreehandLineChange(parentItem, xfo, color, lineThickness);
     this.appData.undoRedoManager.addChange(this.change);
 
     this.xfo = xfo;
@@ -7610,8 +7656,9 @@ class CreateFreehandLineTool extends CreateLineTool {
   }
 
   /**
-   * The createMove method.
-   * @param {any} pt - The pt param.
+   * Updates the free hand line data.
+   *
+   * @param {Vec3} pt - The pt param.
    */
   createMove(pt) {
     const p = this.invxfo.transformVec3(pt);
@@ -7627,8 +7674,9 @@ class CreateFreehandLineTool extends CreateLineTool {
   }
 
   /**
-   * The createRelease method.
-   * @param {any} pt - The pt param.
+   * Finishes free hand line creation
+   *
+   * @param {Vec3} pt - The pt param.
    */
   createRelease(pt) {
     if (this.length == 0) {
@@ -7641,13 +7689,17 @@ class CreateFreehandLineTool extends CreateLineTool {
 
 /**
  * Class representing a create sphere change.
+ *
+ * **Events**
+ * * **updated:** Triggered when the change is updated
+ *
  * @extends CreateGeomChange
  */
 class CreateSphereChange extends CreateGeomChange {
   /**
    * Create a create sphere change.
-   * @param {any} parentItem - The parentItem value.
-   * @param {any} xfo - The xfo value.
+   * @param {TreeItem} parentItem - The parentItem value.
+   * @param {Xfo} xfo - The xfo value.
    */
   constructor(parentItem, xfo) {
     super('Create Sphere', parentItem);
@@ -7664,8 +7716,9 @@ class CreateSphereChange extends CreateGeomChange {
   }
 
   /**
-   * The update method.
-   * @param {any} updateData - The updateData param.
+   * Updates sphere geometry using the specified data.
+   *
+   * @param {object} updateData - The updateData param.
    */
   update(updateData) {
     this.sphere.radius = updateData.radius;
@@ -7673,8 +7726,9 @@ class CreateSphereChange extends CreateGeomChange {
   }
 
   /**
-   * The toJSON method.
-   * @return {any} The return value.
+   * Serializes sphere geometry as a JSON object.
+   *
+   * @return {object} The return value.
    */
   toJSON() {
     const j = super.toJSON();
@@ -7683,32 +7737,40 @@ class CreateSphereChange extends CreateGeomChange {
   }
 
   /**
-   * The changeFromJSON method.
-   * @param {any} j - The j param.
+   * Updates sphere geometry using a JSON object.
+   *
+   * @param {object} j - The j param.
    */
   changeFromJSON(j) {
     if (j.radius) this.geomItem.getGeometry().radius = j.radius;
   }
 }
+
 UndoRedoManager.registerChange('CreateSphereChange', CreateSphereChange);
 
 /**
- * Class representing a create sphere tool.
+ * Tool for creating Sphere geometries.
+ *
+ * **Events**
+ * * **actionFinished:** Triggered when the creation of the geometry is completed.
+ *
  * @extends CreateGeomTool
  */
 class CreateSphereTool extends CreateGeomTool {
   /**
    * Create a create sphere tool.
-   * @param {any} appData - The appData value.
+   *
+   * @param {object} appData - The appData value.
    */
   constructor(appData) {
     super(appData);
   }
 
   /**
-   * The createStart method.
-   * @param {any} xfo - The xfo param.
-   * @param {any} parentItem - The parentItem param.
+   * Starts the creation of the sphere geometry.
+   *
+   * @param {Xfo} xfo - The xfo param.
+   * @param {TreeItem} parentItem - The parentItem param.
    */
   createStart(xfo, parentItem) {
     this.change = new CreateSphereChange(parentItem, xfo);
@@ -7720,8 +7782,9 @@ class CreateSphereTool extends CreateGeomTool {
   }
 
   /**
-   * The createMove method.
-   * @param {any} pt - The pt param.
+   * Updates the sphere geometry structural properties.
+   *
+   * @param {vec3} pt - The pt param.
    */
   createMove(pt) {
     this.radius = pt.distanceTo(this.xfo.tr);
@@ -7729,8 +7792,9 @@ class CreateSphereTool extends CreateGeomTool {
   }
 
   /**
-   * The createRelease method.
-   * @param {any} pt - The pt param.
+   * Finishes the creation of the sphere geometry.
+   *
+   * @param {Vec3} pt - The pt param.
    */
   createRelease(pt) {
     if (this.radius == 0) {
@@ -7743,13 +7807,18 @@ class CreateSphereTool extends CreateGeomTool {
 
 /**
  * Class representing a create cuboid change.
+ *
+ * **Events**
+ * * **updated:** Triggered when the change is updated
+ *
  * @extends CreateGeomChange
  */
 class CreateCuboidChange extends CreateGeomChange {
   /**
    * Create a create cuboid change.
-   * @param {any} parentItem - The parentItem value.
-   * @param {any} xfo - The xfo value.
+   *
+   * @param {TreeItem} parentItem - The parentItem value.
+   * @param {Xfo} xfo - The xfo value.
    */
   constructor(parentItem, xfo) {
     super('Create Cuboid');
@@ -7766,8 +7835,9 @@ class CreateCuboidChange extends CreateGeomChange {
   }
 
   /**
-   * The update method.
-   * @param {any} updateData - The updateData param.
+   * Updates cuboid using the specified data.
+   *
+   * @param {object} updateData - The updateData param.
    */
   update(updateData) {
     if (updateData.baseSize) {
@@ -7784,25 +7854,32 @@ class CreateCuboidChange extends CreateGeomChange {
     this.emit('updated', updateData);
   }
 }
+
 UndoRedoManager.registerChange('CreateCuboidChange', CreateCuboidChange);
 
 /**
- * Class representing a create cuboid tool.
+ * Tool for creating Cuboid geometry.
+ *
+ * **Events**
+ * * **actionFinished:** Triggered when the creation of the geometry is completed.
+ *
  * @extends CreateGeomTool
  */
 class CreateCuboidTool extends CreateGeomTool {
   /**
    * Create a create cuboid tool.
-   * @param {any} appData - The appData value.
+   *
+   * @param {object} appData - The appData value.
    */
   constructor(appData) {
     super(appData);
   }
 
   /**
-   * The createStart method.
-   * @param {any} xfo - The xfo param.
-   * @param {any} parentItem - The parentItem param.
+   * Starts the creation of the cuboid.
+   *
+   * @param {Xfo} xfo - The xfo param.
+   * @param {TreeItem} parentItem - The parentItem param.
    */
   createStart(xfo, parentItem) {
     this.change = new CreateCuboidChange(parentItem, xfo);
@@ -7815,8 +7892,9 @@ class CreateCuboidTool extends CreateGeomTool {
   }
 
   /**
-   * The createMove method.
-   * @param {any} pt - The pt param.
+   * Updates cuboid structural properties.
+   *
+   * @param {Vec3} pt - The pt param.
    */
   createMove(pt) {
     if (this.stage == 1) {
@@ -7834,9 +7912,10 @@ class CreateCuboidTool extends CreateGeomTool {
   }
 
   /**
-   * The createRelease method.
-   * @param {any} pt - The pt param.
-   * @param {any} viewport - The viewport param.
+   * Finishes the creation of the cuboid.
+   *
+   * @param {Vec3} pt - The pt param.
+   * @param {GLViewport} viewport - The viewport param.
    */
   createRelease(pt, viewport) {
     if (this.stage == 1) {
@@ -7856,13 +7935,58 @@ class CreateCuboidTool extends CreateGeomTool {
 }
 
 /**
- * Class representing a scene widget tool.
+ * Class representing a create cone change.
+ *
+ * **Events**
+ * * **updated:** Triggered when the change is updated
+ *
+ * @extends CreateGeomChange
+ */
+class CreateConeChange extends CreateGeomChange {
+  /**
+   * Create a create cone change.
+   *
+   * @param {TreeItem} parentItem - The parentItem value.
+   * @param {Xfo} xfo - The xfo value.
+   */
+  constructor(parentItem, xfo) {
+    super('Create Cone');
+
+    const cone = new zeaEngine.Cone(0.0, 0.0);
+    const material = new zeaEngine.Material('Sphere');
+    this.geomItem = new zeaEngine.GeomItem('Sphere');
+    this.geomItem.setGeometry(cone);
+    this.geomItem.setMaterial(material);
+
+    if (parentItem && xfo) {
+      this.setParentAndXfo(parentItem, xfo);
+    }
+  }
+
+  /**
+   * Updates cone with the specified data.
+   *
+   * @param {object} updateData - The updateData param.
+   */
+  update(updateData) {
+    if (updateData.radius) this.geomItem.getGeometry().setRadius(updateData.radius);
+    if (updateData.height) this.geomItem.getGeometry().setHeight(updateData.height);
+    this.emit('updated', updateData);
+  }
+}
+
+UndoRedoManager.registerChange('CreateConeChange', CreateConeChange);
+
+/**
+ * Class representing a Handle tool.
+ *
  * @extends BaseTool
  */
 class HandleTool extends BaseTool {
   /**
-   * Create a scene widget tool
-   * @param {any} appData - The appData value.
+   * Creates an instance of HandleTool.
+   *
+   * @param {object} appData - The appData value.
    */
   constructor(appData) {
     super(appData);
@@ -7873,7 +7997,7 @@ class HandleTool extends BaseTool {
   }
 
   /**
-   * The activateTool method.
+   * Activates handle tool, which adds icons to VR Controllers.
    */
   activateTool() {
     super.activateTool();
@@ -7896,10 +8020,7 @@ class HandleTool extends BaseTool {
       for (const controller of xrvp.getControllers()) {
         addIconToController(controller);
       }
-      this.addIconToControllerId = xrvp.on(
-        'controllerAdded',
-        addIconToController
-      );
+      this.addIconToControllerId = xrvp.on('controllerAdded', addIconToController);
     };
 
     this.appData.renderer.getXRViewport().then((xrvp) => {
@@ -7908,7 +8029,7 @@ class HandleTool extends BaseTool {
   }
 
   /**
-   * The deactivateTool method.
+   * Deactivates handle tool, which removes icons from controllers.
    */
   deactivateTool() {
     super.deactivateTool();
@@ -7925,9 +8046,10 @@ class HandleTool extends BaseTool {
   // Mouse events
 
   /**
-   * The onMouseDown method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * Event fired when a pointing device button is pressed while the pointer is over the tool.
+   *
+   * @param {MouseEvent} event - The event param.
+   * @return {boolean} The return value.
    */
   onMouseDown(event) {
     //
@@ -7937,18 +8059,17 @@ class HandleTool extends BaseTool {
       if (intersectionData == undefined) return
       if (intersectionData.geomItem.getOwner() instanceof Handle) {
         this.activeHandle = intersectionData.geomItem.getOwner();
-        this.activeHandle.handleMouseDown(
-          Object.assign(event, { intersectionData })
-        );
+        this.activeHandle.handleMouseDown(Object.assign(event, { intersectionData }));
         return true
       }
     }
   }
 
   /**
-   * The onMouseMove method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * Event fired when a pointing device is moved while the cursor's hotspot is inside it.
+   *
+   * @param {MouseEvent} event - The event param.
+   * @return {boolean} - The return value.
    */
   onMouseMove(event) {
     if (this.activeHandle) {
@@ -7960,10 +8081,7 @@ class HandleTool extends BaseTool {
       if (event.button == 0 && event.buttons == 1) return false
 
       const intersectionData = event.viewport.getGeomDataAtPos(event.mousePos);
-      if (
-        intersectionData != undefined &&
-        intersectionData.geomItem.getOwner() instanceof Handle
-      ) {
+      if (intersectionData != undefined && intersectionData.geomItem.getOwner() instanceof Handle) {
         const handle = intersectionData.geomItem.getOwner();
         if (this.__highlightedHandle) this.__highlightedHandle.unhighlight();
 
@@ -7978,9 +8096,10 @@ class HandleTool extends BaseTool {
   }
 
   /**
-   * The onMouseUp method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * Event fired when a pointing device button is released while the pointer is over the tool.
+   *
+   * @param {MouseEvent} event - The event param.
+   * @return {boolean} - The return value.
    */
   onMouseUp(event) {
     if (this.activeHandle) {
@@ -7991,41 +8110,15 @@ class HandleTool extends BaseTool {
   }
 
   /**
-   * The onWheel method.
-   * @param {any} event - The event param.
+   * Event fired when the user rotates the pointing device wheel.
+   *
+   * @param {MouseEvent} event - The event param.
    */
   onWheel(event) {
     if (this.activeHandle) {
       this.activeHandle.onWheel(event);
     }
   }
-
-  // ///////////////////////////////////
-  // Touch events
-
-  /**
-   * The onTouchStart method.
-   * @param {any} event - The event param.
-   */
-  onTouchStart(event) {}
-
-  /**
-   * The onTouchMove method.
-   * @param {any} event - The event param.
-   */
-  onTouchMove(event) {}
-
-  /**
-   * The onTouchEnd method.
-   * @param {any} event - The event param.
-   */
-  onTouchEnd(event) {}
-
-  /**
-   * The onTouchCancel method.
-   * @param {any} event - The event param.
-   */
-  onTouchCancel(event) {}
 
   // ///////////////////////////////////
   // VRController events
@@ -8049,9 +8142,9 @@ class HandleTool extends BaseTool {
   }
 
   /**
-   * The onVRControllerButtonDown method.
+   * Event fired when a VR controller button is pressed over a tool.
+   *
    * @param {any} event - The event param.
-   * @return {any} The return value.
    */
   onVRControllerButtonDown(event) {
     const id = event.controller.getId();
@@ -8072,7 +8165,6 @@ class HandleTool extends BaseTool {
   /**
    * The onVRPoseChanged method.
    * @param {any} event - The event param.
-   * @return {any} The return value.
    */
   onVRPoseChanged(event) {
     for (const controller of event.controllers) {
@@ -8085,8 +8177,7 @@ class HandleTool extends BaseTool {
           event.intersectionData = intersectionData;
           event.geomItem = intersectionData.geomItem;
           if (intersectionData.geomItem != this.mouseOverItems[id]) {
-            if (this.mouseOverItems[id])
-              this.mouseOverItems[id].onMouseLeave(event);
+            if (this.mouseOverItems[id]) this.mouseOverItems[id].onMouseLeave(event);
             this.mouseOverItems[id] = intersectionData.geomItem;
             this.mouseOverItems[id].onMouseEnter(event);
           }
@@ -8100,9 +8191,9 @@ class HandleTool extends BaseTool {
   }
 
   /**
-   * The onVRControllerButtonUp method.
+   * Event fired when a VR controller button is released over a tool.
+   *
    * @param {any} event - The event param.
-   * @return {any} The return value.
    */
   onVRControllerButtonUp(event) {
     this.__prepareVREvent(event);
@@ -8121,36 +8212,31 @@ class HandleTool extends BaseTool {
   }
 }
 
-/** Class representing a slider scene widget.
+/**
+ * Class representing a slider scene widget.
+ *
  * @extends BaseLinearMovementHandle
  */
 class SliderHandle extends BaseLinearMovementHandle {
   /**
    * Create a slider scene widget.
-   * @param {any} name - The name value.
-   * @param {any} length - The length value.
-   * @param {any} radius - The radius value.
-   * @param {any} color - The color value.
+   *
+   * @param {string} name - The name value.
+   * @param {number} length - The length value.
+   * @param {number} radius - The radius value.
+   * @param {Color} color - The color value.
    */
   constructor(name, length = 0.5, radius = 0.02, color = new zeaEngine.Color('#F9CE03')) {
     super(name);
 
     this.lengthParam = this.addParameter(new zeaEngine.NumberParameter('Length', length));
-    this.handleRadiusParam = this.addParameter(
-      new zeaEngine.NumberParameter('Handle Radius', radius)
-    );
-    this.barRadiusParam = this.addParameter(
-      new zeaEngine.NumberParameter('Bar Radius', radius * 0.25)
-    );
+    this.handleRadiusParam = this.addParameter(new zeaEngine.NumberParameter('Handle Radius', radius));
+    this.barRadiusParam = this.addParameter(new zeaEngine.NumberParameter('Bar Radius', radius * 0.25));
     this.colorParam = this.addParameter(new zeaEngine.ColorParameter('Color', color));
-    this.hilghlightColorParam = this.addParameter(
-      new zeaEngine.ColorParameter('Highlight Color', new zeaEngine.Color(1, 1, 1))
-    );
+    this.hilghlightColorParam = this.addParameter(new zeaEngine.ColorParameter('Highlight Color', new zeaEngine.Color(1, 1, 1)));
 
     this.handleMat = new zeaEngine.Material('handle', 'FlatSurfaceShader');
-    this.handleMat
-      .getParameter('BaseColor')
-      .setValue(this.colorParam.getValue());
+    this.handleMat.getParameter('BaseColor').setValue(this.colorParam.getValue());
     // const baseBarMat = new Material('baseBar', 'FlatSurfaceShader');
     // baseBarMat.replaceParameter(this.colorParam);
     const topBarMat = new zeaEngine.Material('topBar', 'FlatSurfaceShader');
@@ -8170,17 +8256,13 @@ class SliderHandle extends BaseLinearMovementHandle {
       barGeom.getParameter('radius').setValue(this.barRadiusParam.getValue());
     });
     this.handleRadiusParam.on('valueChanged', () => {
-      handleGeom
-        .getParameter('radius')
-        .setValue(this.handleRadiusParam.getValue());
+      handleGeom.getParameter('radius').setValue(this.handleRadiusParam.getValue());
     });
     this.lengthParam.on('valueChanged', () => {
       this.__updateSlider(this.value);
     });
     this.colorParam.on('valueChanged', () => {
-      this.handleMat
-        .getParameter('BaseColor')
-        .setValue(this.colorParam.getValue());
+      this.handleMat.getParameter('BaseColor').setValue(this.colorParam.getValue());
     });
 
     this.addChild(this.handle);
@@ -8191,26 +8273,24 @@ class SliderHandle extends BaseLinearMovementHandle {
   }
 
   /**
-   * The highlight method.
+   * Applies a special shinning shader to the handle to illustrate interaction with it.
    */
   highlight() {
-    this.handleMat
-      .getParameter('BaseColor')
-      .setValue(this.hilghlightColorParam.getValue());
+    this.handleMat.getParameter('BaseColor').setValue(this.hilghlightColorParam.getValue());
   }
 
   /**
-   * The unhighlight method.
+   * Removes the shining shader from the handle.
    */
   unhighlight() {
-    this.handleMat
-      .getParameter('BaseColor')
-      .setValue(this.colorParam.getValue());
+    this.handleMat.getParameter('BaseColor').setValue(this.colorParam.getValue());
   }
 
   /**
-   * The setTargetParam method.
-   * @param {any} param - The param param.
+   * Sets global xfo target parameter.
+   *
+   * @param {Parameter} param - The video param.
+   * @param {boolean} track - The track param.
    */
   setTargetParam(param) {
     this.param = param;
@@ -8221,11 +8301,15 @@ class SliderHandle extends BaseLinearMovementHandle {
     param.on('valueChanged', __updateSlider);
   }
 
-  // eslint-disable-next-line require-jsdoc
+  /**
+   *
+   *
+   * @param {*} value -
+   * @private
+   */
   __updateSlider(value) {
     this.value = value;
-    const range =
-      this.param && this.param.getRange() ? this.param.getRange() : [0, 1];
+    const range = this.param && this.param.getRange() ? this.param.getRange() : [0, 1];
     const v = zeaEngine.MathFunctions.remap(value, range[0], range[1], 0, 1);
     const length = this.lengthParam.getValue();
     this.baseBarXfo.sc.z = v * length;
@@ -8241,8 +8325,9 @@ class SliderHandle extends BaseLinearMovementHandle {
   // Interaction events
 
   /**
-   * The onDragStart method.
-   * @param {any} event - The event param.
+   * Handles the initially drag of the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDragStart(event) {
     // Hilight the material.
@@ -8258,18 +8343,14 @@ class SliderHandle extends BaseLinearMovementHandle {
   }
 
   /**
-   * The onDrag method.
-   * @param {any} event - The event param.
+   * Handles drag action of the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDrag(event) {
     const length = this.lengthParam.getValue();
-    const range =
-      this.param && this.param.getRange() ? this.param.getRange() : [0, 1];
-    const value = Math.clamp(
-      zeaEngine.MathFunctions.remap(event.value, 0, length, range[0], range[1]),
-      range[0],
-      range[1]
-    );
+    const range = this.param && this.param.getRange() ? this.param.getRange() : [0, 1];
+    const value = Math.clamp(zeaEngine.MathFunctions.remap(event.value, 0, length, range[0], range[1]), range[0], range[1]);
     if (!this.param) {
       this.__updateSlider(value);
       this.value = value;
@@ -8285,8 +8366,9 @@ class SliderHandle extends BaseLinearMovementHandle {
   }
 
   /**
-   * The onDragEnd method.
-   * @param {any} event - The event param.
+   * Handles the end of dragging the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDragEnd(event) {
     this.change = null;
@@ -8296,25 +8378,25 @@ class SliderHandle extends BaseLinearMovementHandle {
   }
 
   /**
-   * The toJSON method.
-   * @param {any} context - The context param.
-   * @param {any} flags - The flags param.
-   * @return {any} The return value.
+   * Serializes handle item as a JSON object.
+   *
+   * @param {object} context - The context param.
+   * @return {object} The return value.
    */
-  toJSON(context, flags = 0) {
-    const json = super.toJSON(context, flags | SAVE_FLAG_SKIP_CHILDREN);
+  toJSON(context) {
+    const json = super.toJSON(context);
     if (this.param) json.targetParam = this.param.getPath();
     return json
   }
 
   /**
-   * The fromJSON method.
-   * @param {any} json - The json param.
-   * @param {any} context - The context param.
-   * @param {any} flags - The flags param.
+   * Restores handle item from a JSON object.
+   *
+   * @param {object} json - The json param.
+   * @param {object} context - The context param.
    */
-  fromJSON(json, context, flags) {
-    super.fromJSON(json, context, flags);
+  fromJSON(json, context) {
+    super.fromJSON(json, context);
 
     if (json.targetParam) {
       context.resolvePath(json.targetParam).then((param) => {
@@ -8324,43 +8406,33 @@ class SliderHandle extends BaseLinearMovementHandle {
   }
 }
 
-zeaEngine.sgFactory.registerClass('SliderHandle', SliderHandle);
+zeaEngine.Registry.register('SliderHandle', SliderHandle);
 
-/** Class representing a slider scene widget.
+/**
+ * Class representing a slider scene widget.
+ *
  * @extends BaseAxialRotationHandle
  */
 class ArcSlider extends BaseAxialRotationHandle {
   /**
-   * Create a slider scene widget.
-   * @param {any} name - The name value.
-   * @param {any} length - The length value.
-   * @param {any} radius - The radius value.
-   * @param {any} color - The color value.
+   * Creates an instance of ArcSlider.
+   *
+   * @param {string} name - The name value
+   * @param {number} [arcRadius=1] - The arcRadius value
+   * @param {number} [arcAngle=1] - The arcAngle value
+   * @param {number} [handleRadius=0.02] - The handleRadius value
+   * @param {Color} [color=new Color(1, 1, 0)] - the color value
    */
-  constructor(
-    name,
-    arcRadius = 1,
-    arcAngle = 1,
-    handleRadius = 0.02,
-    color = new zeaEngine.Color(1, 1, 0)
-  ) {
+  constructor(name, arcRadius = 1, arcAngle = 1, handleRadius = 0.02, color = new zeaEngine.Color(1, 1, 0)) {
     super(name);
-    this.arcRadiusParam = this.addParameter(
-      new zeaEngine.NumberParameter('Arc Radius', arcRadius)
-    );
-    this.arcAngleParam = this.addParameter(
-      new zeaEngine.NumberParameter('Arc Angle', arcAngle)
-    );
-    this.handleRadiusParam = this.addParameter(
-      new zeaEngine.NumberParameter('Handle Radius', handleRadius)
-    );
+    this.arcRadiusParam = this.addParameter(new zeaEngine.NumberParameter('Arc Radius', arcRadius));
+    this.arcAngleParam = this.addParameter(new zeaEngine.NumberParameter('Arc Angle', arcAngle));
+    this.handleRadiusParam = this.addParameter(new zeaEngine.NumberParameter('Handle Radius', handleRadius));
     // this.barRadiusParam = this.addParameter(
     //   new NumberParameter('Bar Radius', radius * 0.25)
     // );
     this.colorParam = this.addParameter(new zeaEngine.ColorParameter('Color', color));
-    this.hilghlightColorParam = this.addParameter(
-      new zeaEngine.ColorParameter('Highlight Color', new zeaEngine.Color(1, 1, 1))
-    );
+    this.hilghlightColorParam = this.addParameter(new zeaEngine.ColorParameter('Highlight Color', new zeaEngine.Color(1, 1, 1)));
 
     this.handleMat = new zeaEngine.Material('handleMat', 'HandleShader');
     const arcGeom = new zeaEngine.Circle(arcRadius, arcAngle, 64);
@@ -8387,19 +8459,13 @@ class ArcSlider extends BaseAxialRotationHandle {
       const arcRadius = this.arcRadiusParam.getValue();
       arcGeom.getParameter('Radius').setValue(arcRadius);
       this.handleGeomOffsetXfo.tr.x = arcRadius;
-      this.handle
-        .getParameter('GeomOffsetXfo')
-        .setValue(this.handleGeomOffsetXfo);
+      this.handle.getParameter('GeomOffsetXfo').setValue(this.handleGeomOffsetXfo);
     });
     this.handleRadiusParam.on('valueChanged', () => {
-      handleGeom
-        .getParameter('radius')
-        .setValue(this.handleRadiusParam.getValue());
+      handleGeom.getParameter('radius').setValue(this.handleRadiusParam.getValue());
     });
     this.colorParam.on('valueChanged', () => {
-      this.handleMat
-        .getParameter('BaseColor')
-        .setValue(this.colorParam.getValue());
+      this.handleMat.getParameter('BaseColor').setValue(this.colorParam.getValue());
     });
 
     this.addChild(this.handle);
@@ -8413,59 +8479,47 @@ class ArcSlider extends BaseAxialRotationHandle {
   // Mouse events
 
   /**
-   * The onMouseEnter method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * Event fired when a pointing device is initially moved within the space of the handle.
+   *
+   * @param {MouseEvent} event - The event param.
    */
   onMouseEnter(event) {
-    if (
-      event.intersectionData &&
-      event.intersectionData.geomItem == this.handle
-    )
-      this.highlight();
+    if (event.intersectionData && event.intersectionData.geomItem == this.handle) this.highlight();
   }
 
   /**
-   * The onMouseLeave method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * Event fired when a pointing device moves outside of the space of the handle.
+   *
+   * @param {MouseEvent} event - The event param.
    */
   onMouseLeave(event) {
     this.unhighlight();
   }
 
   /**
-   * The onMouseDown method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * Event fired when a pointing device button is pressed while the pointer is over the handle element.
+   *
+   * @param {MouseEvent} event - The event param.
    */
   onMouseDown(event) {
     // We do not want to handle events
     // that have propagated from children of
     // the slider.
-    if (
-      event.intersectionData &&
-      event.intersectionData.geomItem == this.handle
-    )
-      super.onMouseDown(event);
+    if (event.intersectionData && event.intersectionData.geomItem == this.handle) super.onMouseDown(event);
   }
 
   /**
-   * The highlight method.
+   * Applies a special shinning shader to the handle to illustrate interaction with it.
    */
   highlight() {
-    this.handleMat
-      .getParameter('BaseColor')
-      .setValue(this.hilghlightColorParam.getValue());
+    this.handleMat.getParameter('BaseColor').setValue(this.hilghlightColorParam.getValue());
   }
 
   /**
-   * The unhighlight method.
+   * Removes the shining shader from the handle.
    */
   unhighlight() {
-    this.handleMat
-      .getParameter('BaseColor')
-      .setValue(this.colorParam.getValue());
+    this.handleMat.getParameter('BaseColor').setValue(this.colorParam.getValue());
   }
 
   // /**
@@ -8496,15 +8550,18 @@ class ArcSlider extends BaseAxialRotationHandle {
   // Interaction events
 
   /**
-   * The getBaseXfo method.
+   * Returns handle's global Xfo
+   *
+   * @return {Xfo} - The Xfo value
    */
   getBaseXfo() {
     return this.handle.getParameter('GlobalXfo').getValue()
   }
 
   /**
-   * The onDragStart method.
-   * @param {any} event - The event param.
+   * Handles the initially drag interaction of the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDragStart(event) {
     this.baseXfo = this.getParameter('GlobalXfo').getValue().clone();
@@ -8529,16 +8586,16 @@ class ArcSlider extends BaseAxialRotationHandle {
   }
 
   /**
-   * The onDrag method.
-   * @param {any} event - The event param.
+   * Handles drag interaction of the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDrag(event) {
     const vec1 = event.holdPos.subtract(this.baseXfo.tr);
     vec1.normalizeInPlace();
 
     let angle = this.vec0.angleTo(vec1);
-    if (this.vec0.cross(vec1).dot(this.baseXfo.ori.getZaxis()) < 0)
-      angle = -angle;
+    if (this.vec0.cross(vec1).dot(this.baseXfo.ori.getZaxis()) < 0) angle = -angle;
 
     if (this.range) {
       angle = Math.clamp(angle, this.range[0], this.range[1]);
@@ -8553,7 +8610,7 @@ class ArcSlider extends BaseAxialRotationHandle {
     this.deltaXfo.ori.setFromAxisAndAngle(new Vec3(0, 0, 1), angle);
 
     const newXfo = this.baseXfo.multiply(this.deltaXfo);
-    const value = newXfo; //.multiply(this.offsetXfo);
+    const value = newXfo; // .multiply(this.offsetXfo);
 
     if (this.change) {
       this.change.update({
@@ -8566,8 +8623,9 @@ class ArcSlider extends BaseAxialRotationHandle {
   }
 
   /**
-   * The onDragEnd method.
-   * @param {any} event - The event param.
+   * Handles the end of dragging interaction with the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDragEnd(event) {
     this.change = null;
@@ -8578,25 +8636,25 @@ class ArcSlider extends BaseAxialRotationHandle {
   }
 
   /**
-   * The toJSON method.
-   * @param {any} context - The context param.
-   * @param {any} flags - The flags param.
-   * @return {any} The return value.
+   * Serializes handle item as a JSON object.
+   *
+   * @param {object} context - The context param.
+   * @return {object} The return value.
    */
-  toJSON(context, flags = 0) {
-    const json = super.toJSON(context, flags | SAVE_FLAG_SKIP_CHILDREN);
+  toJSON(context) {
+    const json = super.toJSON(context);
     if (this.param) json.targetParam = this.param.getPath();
     return json
   }
 
   /**
-   * The fromJSON method.
-   * @param {any} json - The json param.
-   * @param {any} context - The context param.
-   * @param {any} flags - The flags param.
+   * Restores handle item from a JSON object.
+   *
+   * @param {object} json - The json param.
+   * @param {object} context - The context param.
    */
-  fromJSON(json, context, flags) {
-    super.fromJSON(json, context, flags);
+  fromJSON(json, context) {
+    super.fromJSON(json, context);
 
     if (json.targetParam) {
       context.resolvePath(json.targetParam).then((param) => {
@@ -8606,22 +8664,414 @@ class ArcSlider extends BaseAxialRotationHandle {
   }
 }
 
-zeaEngine.sgFactory.registerClass('ArcSlider', ArcSlider);
+zeaEngine.Registry.register('ArcSlider', ArcSlider);
 
-/** Class representing a planar movement scene widget.
+/**
+ * Kind of an abstract class, that represents the mandatory structure of a change classes that are used in the [`UndoRedoManager`]().
+ *
+ * @note If you don't extend this class, ensure to implement all methods specified in here.
+ * @extends {EventEmitter}
+ */
+class Change$1 extends zeaEngine.EventEmitter {
+  /**
+   * Every class that extends from `Change` must contain a global `name` attribute.
+   * It is used by the `UndoRedoManager` factory to re-construct the class of the specific implementation of the `Change` class.
+   *
+   * @param {string} name - The name value.
+   */
+  constructor(name) {
+    super();
+    this.name = name ? name : UndoRedoManager$1.getChangeClassName(this);
+  }
+
+  /**
+   * Called by the `UndoRedoManager` in the `undo` method, and contains the code you wanna run when the undo action is triggered,
+   * of course it depends on what you're doing.
+   *
+   * @note This method needs to be implemented, otherwise it will throw an Error.
+   */
+  undo() {
+    throw new Error('Implement me')
+  }
+
+  /**
+   * Called by the `UndoRedoManager` in the `redo` method, and is the same as the `undo` method, contains the specific code you wanna run.
+   *
+   * @note This method needs to be implemented, otherwise it will throw an Error.
+   */
+  redo() {
+    throw new Error('Implement me')
+  }
+
+  /**
+   * Use this method to update the state of your `Change` class.
+   *
+   * @note This method needs to be implemented, otherwise it will throw an Error.
+   *
+   * @param {object|string|any} updateData - The updateData param.
+   */
+  update(updateData) {
+    throw new Error('Implement me')
+  }
+
+  /**
+   * Serializes the `Change` instance as a JSON object, allowing persistence/replication
+   *
+   * @note This method needs to be implemented, otherwise it will return an empty object.
+   *
+   * @param {object} context - The appData param.
+   * @return {object} The return value.
+   */
+  toJSON(context) {
+    return {}
+  }
+
+  /**
+   * The counterpart of the `toJSON` method, restoring `Change` instance's state with the specified JSON object.
+   * Each `Change` class must implement the logic for reconstructing itself.
+   * Very often used to restore from persisted/replicated JSON.
+   *
+   * @note This method needs to be implemented, otherwise it will do nothing.
+   *
+   * @param {object} j - The j param.
+   * @param {object} context - The context param.
+   */
+  fromJSON(j, context) {}
+
+  /**
+   * Useful method to update the state of an existing identified `Change` through replication.
+   *
+   * @note By default it calls the `update` method in the `Change` class, but you can override this if you need to.
+   *
+   * @param {object} j - The j param.
+   */
+  changeFromJSON(j) {
+    // Many change objects can load json directly
+    // in the update method.
+    this.update(j);
+  }
+
+  /**
+   * Method destined to clean up things that would need to be cleaned manually.
+   * It is executed when flushing the undo/redo stacks or adding a new change to the undo stack,
+   * so it is require in any class that represents a change.
+   *
+   */
+  destroy() {}
+}
+
+const __changeClasses$1 = {};
+const __classNames$1 = {};
+const __classes$1 = [];
+
+/**
+ * `UndoRedoManager` is a mixture of the [Factory Design Pattern](https://en.wikipedia.org/wiki/Factory_method_pattern) and the actual changes stacks manager.
+ * This is the heart of the Undo/Redo System, letting you navigate through the changes history you've saved.
+ *
+ * **Events**
+ * * **changeAdded:** Triggered when a change is added.
+ * * **changeUpdated:** Triggered when the last change added updates its state.
+ * * **changeUndone:** Triggered when the `undo` method is called, after removing the last change from the stack.
+ * * **changeRedone:** Triggered when the `redo` method is called, after restoring the last change removed from the undo stack.
+ * */
+class UndoRedoManager$1 extends zeaEngine.EventEmitter {
+  /**
+   * It doesn't have any parameters, but under the hood it uses [EventsEmitter]() to notify subscribers when something happens.
+   * The implementation is really simple, just initialize it like any other class.
+   */
+  constructor() {
+    super();
+    this.__undoStack = [];
+    this.__redoStack = [];
+    this.__currChange = null;
+
+    this.__currChangeUpdated = this.__currChangeUpdated.bind(this);
+  }
+
+  /**
+   * As the name indicates, it empties undo/redo stacks permanently, losing all stored actions.
+   * Right now, before flushing the stacks it calls the `destroy` method on all changes, ensure to at least declare it.
+   */
+  flush() {
+    for (const change of this.__undoStack) change.destroy();
+    this.__undoStack = [];
+    for (const change of this.__redoStack) change.destroy();
+    this.__redoStack = [];
+    if (this.__currChange) {
+      this.__currChange.off('updated', this.__currChangeUpdated);
+      this.__currChange = null;
+    }
+  }
+
+  /**
+   * Receives an instance of a class that extends or has the same structure as `Change` class.
+   * When this action happens, the last added change update notifications will get disconnected.
+   * Which implies that any future updates to changes that are not the last one, would need a new call to the `addChange` method.
+   * Also, resets the redo stack(Calls destroy method when doing it).
+   *
+   * @param {Change} change - The change param.
+   */
+  addChange(change) {
+    // console.log("AddChange:", change.name)
+    if (!(change instanceof Change$1)) console.warn('Change object is not derived from Change.');
+    if (this.__currChange && this.__currChange.off) {
+      this.__currChange.off('updated', this.__currChangeUpdated);
+    }
+
+    this.__undoStack.push(change);
+    this.__currChange = change;
+    if (this.__currChange.on) this.__currChange.on('updated', this.__currChangeUpdated);
+
+    for (const change of this.__redoStack) change.destroy();
+    this.__redoStack = [];
+
+    this.emit('changeAdded', { change });
+  }
+
+  /**
+   * Returns the last change added to the undo stack, but in case it is empty a `null` is returned.
+   *
+   * @return {Change|null} The return value.
+   */
+  getCurrentChange() {
+    return this.__currChange
+  }
+
+  /**
+   * @private
+   * @param {object|any} updateData
+   */
+  __currChangeUpdated(updateData) {
+    this.emit('changeUpdated', updateData);
+  }
+
+  /**
+   * Rollback the latest action, passing it to the redo stack in case you wanna recover it later on.
+   *
+   * @param {boolean} pushOnRedoStack - The pushOnRedoStack param.
+   */
+  undo(pushOnRedoStack = true) {
+    if (this.__undoStack.length > 0) {
+      if (this.__currChange) {
+        this.__currChange.off('updated', this.__currChangeUpdated);
+        this.__currChange = null;
+      }
+
+      const change = this.__undoStack.pop();
+      // console.log("undo:", change.name)
+      change.undo();
+      if (pushOnRedoStack) {
+        this.__redoStack.push(change);
+        this.emit('changeUndone');
+      }
+    }
+  }
+
+  /**
+   * Rollbacks the `undo` action by moving the change from the `redo` stack to the `undo` stack.
+   * Emits the `changeRedone` event, if you want to subscribe to it.
+   */
+  redo() {
+    if (this.__redoStack.length > 0) {
+      const change = this.__redoStack.pop();
+      // console.log("redo:", change.name)
+      change.redo();
+      this.__undoStack.push(change);
+      this.emit('changeRedone');
+    }
+  }
+
+  // //////////////////////////////////
+  // User Synchronization
+
+  /**
+   * Basically returns a new instance of the derived `Change` class. This is why we need the `name` attribute.
+   *
+   * @param {string} className - The className param.
+   * @return {Change} - The return value.
+   */
+  constructChange(className) {
+    return new __changeClasses$1[className]()
+  }
+
+  /**
+   * Checks if a class of an instantiated object is registered in the UndoRedo Factory.
+   *
+   * @param {Change} inst - The instance of the Change class.
+   * @return {boolean} - Returns 'true' if the class has been registered.
+   */
+  static isChangeClassRegistered(inst) {
+    const id = __classes$1.indexOf(inst.constructor);
+    return id != -1
+  }
+
+  /**
+   * Very simple method that returns the name of the instantiated class, checking first in the registry and returning if found,
+   * if not then checks the `name` attribute declared in constructor.
+   *
+   * @param {Change} inst - The instance of the Change class.
+   * @return {string} - The return value.
+   */
+  static getChangeClassName(inst) {
+    const id = __classes$1.indexOf(inst.constructor);
+    if (__classNames$1[id]) return __classNames$1[id]
+    console.warn('Change not registered:', inst.constructor.name);
+    return ''
+  }
+
+  /**
+   * Registers the class in the UndoRedoManager Factory.
+   * Why do we need to specify the name of the class?
+   * Because when the code is transpiled, the defined class names change, so it won't be known as we declared it anymore.
+   *
+   * @param {string} name - The name param.
+   * @param {Change} cls - The cls param.
+   */
+  static registerChange(name, cls) {
+    if (__classes$1.indexOf(cls) != -1) console.warn('Class already registered:', name);
+
+    const id = __classes$1.length;
+    __classes$1.push(cls);
+    __changeClasses$1[name] = cls;
+    __classNames$1[id] = name;
+  }
+}
+
+/**
+ * Represents a `Change` class for storing `Parameter` values.
+ *
+ * **Events**
+ * * **updated:** Triggered when the `ParameterValueChange` value is updated.
+ *
+ * @extends Change
+ */
+class ParameterValueChange$2 extends Change$1 {
+  /**
+   * Creates an instance of ParameterValueChange.
+   *
+   * @param {Parameter} param - The param value.
+   * @param {object|string|number|any} newValue - The newValue value.
+   */
+  constructor(param, newValue) {
+    if (param) {
+      super(param ? param.getName() + ' Changed' : 'ParameterValueChange');
+      this.__prevValue = param.getValue();
+      this.__param = param;
+      if (newValue != undefined) {
+        this.__nextValue = newValue;
+        this.__param.setValue(this.__nextValue);
+      }
+    } else {
+      super();
+    }
+  }
+
+  /**
+   * Rollbacks the value of the parameter to the previous one, passing it to the redo stack in case you wanna recover it later on.
+   */
+  undo() {
+    if (!this.__param) return
+    this.__param.setValue(this.__prevValue);
+  }
+
+  /**
+   * Rollbacks the `undo` action by moving the change from the `redo` stack to the `undo` stack
+   * and updating the parameter with the new value.
+   */
+  redo() {
+    if (!this.__param) return
+    this.__param.setValue(this.__nextValue);
+  }
+
+  /**
+   * Updates the state of the current parameter change value.
+   *
+   * @param {Parameter} updateData - The updateData param.
+   */
+  update(updateData) {
+    if (!this.__param) return
+    this.__nextValue = updateData.value;
+    this.__param.setValue(this.__nextValue);
+    this.emit('updated', updateData);
+  }
+
+  /**
+   * Serializes `Parameter` instance value as a JSON object, allowing persistence/replication.
+   *
+   * @param {object} context - The context param.
+   * @return {object} The return value.
+   */
+  toJSON(context) {
+    const j = {
+      name: this.name,
+      paramPath: this.__param.getPath(),
+    };
+
+    if (this.__nextValue != undefined) {
+      if (this.__nextValue.toJSON) {
+        j.value = this.__nextValue.toJSON();
+      } else {
+        j.value = this.__nextValue;
+      }
+    }
+    return j
+  }
+
+  /**
+   * Restores `Parameter` instance's state with the specified JSON object.
+   *
+   * @param {object} j - The j param.
+   * @param {object} context - The context param.
+   */
+  fromJSON(j, context) {
+    const param = context.appData.scene.getRoot().resolvePath(j.paramPath, 1);
+    if (!param || !(param instanceof zeaEngine.Parameter)) {
+      console.warn('resolvePath is unable to resolve', j.paramPath);
+      return
+    }
+    this.__param = param;
+    this.__prevValue = this.__param.getValue();
+    if (this.__prevValue.clone) this.__nextValue = this.__prevValue.clone();
+    else this.__nextValue = this.__prevValue;
+
+    this.name = j.name;
+    if (j.value != undefined) this.changeFromJSON(j);
+  }
+
+  /**
+   * Updates the state of an existing identified `Parameter` through replication.
+   *
+   * @param {object} j - The j param.
+   */
+  changeFromJSON(j) {
+    if (!this.__param) return
+    if (this.__nextValue.fromJSON) this.__nextValue.fromJSON(j.value);
+    else this.__nextValue = j.value;
+    this.__param.setValue(this.__nextValue);
+  }
+}
+
+UndoRedoManager$1.registerChange('ParameterValueChange', ParameterValueChange$2);
+
+/**
+ * Class representing a planar movement scene widget.
+ *
  * @extends Handle
  */
 class ScreenSpaceMovementHandle extends Handle {
   /**
    * Create a planar movement scene widget.
+   *
+   * @param {string} name - The name value
    */
   constructor(name) {
     super(name);
   }
 
   /**
-   * The setTargetParam method.
-   * @param {any} param - The param param.
+   * Sets global xfo target parameter.
+   *
+   * @param {Parameter} param - The video param.
    * @param {boolean} track - The track param.
    */
   setTargetParam(param, track = true) {
@@ -8636,7 +9086,9 @@ class ScreenSpaceMovementHandle extends Handle {
   }
 
   /**
-   * The getTargetParam method.
+   * Returns target's global xfo parameter.
+   *
+   * @return {Parameter} - returns handle's target global Xfo.
    */
   getTargetParam() {
     return this.param ? this.param : this.getParameter('GlobalXfo')
@@ -8646,9 +9098,10 @@ class ScreenSpaceMovementHandle extends Handle {
   // Mouse events
 
   /**
-   * The handleMouseDown method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * Handles mouse down interaction with the handle.
+   *
+   * @param {MouseEvent} event - The event param.
+   * @return {boolean} - The return value.
    */
   handleMouseDown(event) {
     this.gizmoRay = new zeaEngine.Ray();
@@ -8664,8 +9117,10 @@ class ScreenSpaceMovementHandle extends Handle {
   }
 
   /**
-   * The handleMouseMove method.
-   * @param {any} event - The event param.
+   * Handles mouse move interaction with the handle.
+   *
+   * @param {MouseEvent} event - The event param
+   * @return {boolean} - The return value
    */
   handleMouseMove(event) {
     const dist = event.mouseRay.intersectRayPlane(this.gizmoRay);
@@ -8675,9 +9130,10 @@ class ScreenSpaceMovementHandle extends Handle {
   }
 
   /**
-   * The handleMouseUp method.
-   * @param {any} event - The event param.
-   * @return {any} The return value.
+   * Handles mouse up interaction with the handle.
+   *
+   * @param {MouseEvent} event - The event param.
+   * @return {boolean} - The return value.
    */
   handleMouseUp(event) {
     const dist = event.mouseRay.intersectRayPlane(this.gizmoRay);
@@ -8690,22 +9146,24 @@ class ScreenSpaceMovementHandle extends Handle {
   // Interaction events
 
   /**
-   * The onDragStart method.
-   * @param {any} event - The event param.
+   * Handles the initially drag of the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDragStart(event) {
     this.grabPos = event.grabPos;
     const param = this.getTargetParam();
     this.baseXfo = param.getValue();
     if (event.undoRedoManager) {
-      this.change = new ParameterValueChange$1(param);
+      this.change = new ParameterValueChange$2(param);
       event.undoRedoManager.addChange(this.change);
     }
   }
 
   /**
-   * The onDrag method.
-   * @param {any} event - The event param.
+   * Handles drag action of the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDrag(event) {
     const dragVec = event.holdPos.subtract(this.grabPos);
@@ -8724,8 +9182,9 @@ class ScreenSpaceMovementHandle extends Handle {
   }
 
   /**
-   * The onDragEnd method.
-   * @param {any} event - The event param.
+   * Handles the end of dragging the handle.
+   *
+   * @param {MouseEvent|TouchEvent|object} event - The event param.
    */
   onDragEnd(event) {
     this.change = null;
@@ -8735,11 +9194,18 @@ class ScreenSpaceMovementHandle extends Handle {
 exports.ArcSlider = ArcSlider;
 exports.AxialRotationHandle = AxialRotationHandle;
 exports.Change = Change;
+exports.CreateCircleChange = CreateCircleChange;
 exports.CreateCircleTool = CreateCircleTool;
+exports.CreateConeChange = CreateConeChange;
+exports.CreateCuboidChange = CreateCuboidChange;
 exports.CreateCuboidTool = CreateCuboidTool;
+exports.CreateFreehandLineChange = CreateFreehandLineChange;
 exports.CreateFreehandLineTool = CreateFreehandLineTool;
+exports.CreateLineChange = CreateLineChange;
 exports.CreateLineTool = CreateLineTool;
+exports.CreateRectChange = CreateRectChange;
 exports.CreateRectTool = CreateRectTool;
+exports.CreateSphereChange = CreateSphereChange;
 exports.CreateSphereTool = CreateSphereTool;
 exports.HandleTool = HandleTool;
 exports.LinearMovementHandle = LinearMovementHandle;
@@ -8747,8 +9213,10 @@ exports.OpenVRUITool = OpenVRUITool;
 exports.ParameterValueChange = ParameterValueChange$1;
 exports.PlanarMovementHandle = PlanarMovementHandle;
 exports.ScreenSpaceMovementHandle = ScreenSpaceMovementHandle;
+exports.SelectionChange = SelectionChange;
 exports.SelectionManager = SelectionManager;
 exports.SelectionTool = SelectionTool;
+exports.SelectionVisibilityChange = SelectionVisibilityChange;
 exports.SliderHandle = SliderHandle;
 exports.ToolManager = ToolManager;
 exports.TreeItemAddChange = TreeItemAddChange;

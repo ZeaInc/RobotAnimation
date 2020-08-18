@@ -13,7 +13,7 @@ const loadPointCloud = (appData) => {
     const xfoParam = pointcloud.getParameter('GlobalXfo')
     const xfo = xfoParam.getValue()
     console.log(xfo.toString())
-    xfo.tr.addInPlace(new Vec3(15, 15, 0))
+    xfo.tr.addInPlace(new Vec3(17, 15, 0))
     xfoParam.setValue(xfo)
   })
 

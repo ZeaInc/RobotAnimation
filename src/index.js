@@ -41,6 +41,12 @@ const pointCloud = loadPointCloud(appData)
 scene.getRoot().addChild(pointCloud)
 
 ////////////////////////////////////
+// Setup Animation
+
+import setupAnimation from './3.setupAnimation.js'
+setupAnimation(treeItem)
+
+////////////////////////////////////
 // Setup the Left side Tree view.
 
 import {
@@ -62,6 +68,10 @@ appData.undoRedoManager = new UndoRedoManager()
 appData.toolManager = new ToolManager(appData)
 
 renderer.setUndoRedoManager(appData.undoRedoManager)
+
+const target = treeItem.getChildByName('target')
+appData.selectionManager.setSelection(new Set([target]), false)
+
 ////////////////////////////////////////////////////
 // Setup the tools.
 

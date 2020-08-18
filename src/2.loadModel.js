@@ -1,4 +1,13 @@
-import { Color, Group, Material, TreeItem, GeomItem, Cuboid, PassType } from '../libs/zea-engine/dist/index.esm.js'
+import {
+  Quat,
+  Color,
+  Group,
+  Material,
+  TreeItem,
+  GeomItem,
+  Cuboid,
+  PassType,
+} from '../libs/zea-engine/dist/index.esm.js'
 import { GLCADPass, CADAsset } from '../libs/zea-cad/dist/index.rawimport.js'
 import { IKSolver, TriangleIKSolver, RamAndPistonOperator } from '../libs/zea-kinematics/dist/index.rawimport.js'
 
@@ -11,7 +20,7 @@ const loadModel = (appData) => {
 
   ////////////////////////////////////
   // // Load the Robot Model
-  const asset = new CADAsset()
+  const asset = new CADAsset('MC700_ASSY')
   asset.getParameter('DataFilePath').setUrl('data/MC700_ASSY.zcad')
 
   treeItem.addChild(asset)
@@ -24,6 +33,13 @@ const loadModel = (appData) => {
   const ikSolver = new IKSolver('ikSolver')
   ikSolver.getParameter('Iterations').setValue(40)
   treeItem.addChild(ikSolver)
+
+  const targGeom = new Cuboid(0.05, 0.1, 0.1)
+  const targGeomMaterial = new Material('targGeomMaterial', 'SimpleSurfaceShader')
+  targGeomMaterial.getParameter('BaseColor').setValue(new Color(0, 0.5, 0))
+  const targGeomItem = new GeomItem('target', targGeom, targGeomMaterial)
+  treeItem.addChild(targGeomItem)
+  ikSolver.getInput('Target').setParam(targGeomItem.getParameter('GlobalXfo'))
 
   ///////////////////////////////////////
   // Setup the joints
@@ -75,21 +91,20 @@ const loadModel = (appData) => {
 
     /////////////////////////////////////////
     // Setup the Target
-    const targGeom = new Cuboid(0.05, 0.1, 0.1)
-    const targGeomMaterial = new Material('targGeommaterial', 'SimpleSurfaceShader')
-    targGeomMaterial.getParameter('BaseColor').setValue(new Color(0, 0.5, 0))
-    const targGeomItem = new GeomItem('target', targGeom, targGeomMaterial)
+
     const targXfo = asset.getChildByName('NAUO15').getParameter('GlobalXfo').getValue().clone()
     targXfo.sc.set(1, 1, 1)
+    // targXfo.tr = targXfo.ori.rotateVec3(new Vec3(1, 1, 1))
     // targXfo.ori.setFromAxisAndAngle(new Vec3(0, 1, 0), Math.PI * 0.5);
+    const align = new Quat()
+    // align.setFromAxisAndAngle(new Vec3(0, 1, 0), -0.5)
+    // targXfo.ori = align.multiply(targXfo.ori)
+    // align.setFromAxisAndAngle(new Vec3(0, 0, 1), 0.5)
+    // targXfo.ori = align.multiply(targXfo.ori)
+    // console.log(targXfo.ori.rotateVec3(new Vec3(1, 0, 0)).toString())
     targGeomItem.getParameter('GlobalXfo').setValue(targXfo)
-    treeItem.addChild(targGeomItem)
-
-    ikSolver.getInput('Target').setParam(targGeomItem.getParameter('GlobalXfo'))
 
     ikSolver.enable()
-
-    appData.selectionManager.setSelection(new Set([targGeomItem]), false)
 
     /////////////////////////////////////////
     // Setup Counterweight
