@@ -625,7 +625,16 @@ class UndoRedoManager extends zeaEngine.EventEmitter {
     __changeClasses[name] = cls;
     __classNames[id] = name;
   }
+
+  static getInstance() {
+    if (!inst) {
+      inst = new UndoRedoManager();
+    }
+    return inst
+  }
 }
+
+let inst;
 
 /**
  * Represents a `Change` class for storing `Parameter` values.
@@ -654,6 +663,9 @@ class ParameterValueChange$1 extends Change {
     } else {
       super();
     }
+
+    this.suppressPrimaryChange = false;
+    this.secondaryChanges = [];
   }
 
   /**
@@ -661,7 +673,10 @@ class ParameterValueChange$1 extends Change {
    */
   undo() {
     if (!this.__param) return
-    this.__param.setValue(this.__prevValue);
+
+    if (!this.suppressPrimaryChange) this.__param.setValue(this.__prevValue);
+
+    this.secondaryChanges.forEach((change) => change.undo());
   }
 
   /**
@@ -670,7 +685,9 @@ class ParameterValueChange$1 extends Change {
    */
   redo() {
     if (!this.__param) return
-    this.__param.setValue(this.__nextValue);
+    if (!this.suppressPrimaryChange) this.__param.setValue(this.__nextValue);
+
+    this.secondaryChanges.forEach((change) => change.redo());
   }
 
   /**
@@ -1006,7 +1023,8 @@ class LinearMovementHandle extends BaseLinearMovementHandle {
     handleMat.getParameter('maintainScreenSize').setValue(1);
     this.colorParam = handleMat.getParameter('BaseColor');
     this.colorParam.setValue(color);
-    const handleGeom = new zeaEngine.Cylinder(thickness, length, 64, 2, true, true);
+    const handleGeom = new zeaEngine.Cylinder(thickness, length, 64);
+    handleGeom.getParameter('BaseZAtZero').setValue(true);
     const tipGeom = new zeaEngine.Cone(thickness * 4, thickness * 10, 64, true);
     const handle = new zeaEngine.GeomItem('handle', handleGeom, handleMat);
 
@@ -1068,10 +1086,9 @@ class LinearMovementHandle extends BaseLinearMovementHandle {
     this.grabPos = event.grabPos;
     const param = this.getTargetParam();
     this.baseXfo = param.getValue();
-    if (event.undoRedoManager) {
-      this.change = new ParameterValueChange$1(param);
-      event.undoRedoManager.addChange(this.change);
-    }
+
+    this.change = new ParameterValueChange$1(param);
+    UndoRedoManager.getInstance().addChange(this.change);
   }
 
   /**
@@ -1085,13 +1102,9 @@ class LinearMovementHandle extends BaseLinearMovementHandle {
     const newXfo = this.baseXfo.clone();
     newXfo.tr.addInPlace(dragVec);
 
-    if (this.change) {
-      this.change.update({
-        value: newXfo,
-      });
-    } else {
-      this.param.setValue(newXfo);
-    }
+    this.change.update({
+      value: newXfo,
+    });
   }
 
   /**
@@ -1163,10 +1176,8 @@ class BaseAxialRotationHandle extends Handle {
     this.grabCircleRadius = this.vec0.length();
     this.vec0.normalizeInPlace();
 
-    if (event.undoRedoManager) {
-      this.change = new ParameterValueChange$1(param);
-      event.undoRedoManager.addChange(this.change);
-    }
+    this.change = new ParameterValueChange$1(param);
+    UndoRedoManager.getInstance().addChange(this.change);
   }
 
   /**
@@ -1188,7 +1199,7 @@ class BaseAxialRotationHandle extends Handle {
     if (this.vec0.cross(vec1).dot(this.baseXfo.ori.getZaxis()) < 0) angle = -angle;
 
     if (this.range) {
-      angle = Math.clamp(angle, this.range[0], this.range[1]);
+      angle = zeaEngine.MathFunctions.clamp(angle, this.range[0], this.range[1]);
     }
 
     if (event.shiftKey) {
@@ -1202,14 +1213,9 @@ class BaseAxialRotationHandle extends Handle {
     const newXfo = this.baseXfo.multiply(this.deltaXfo);
     const value = newXfo.multiply(this.offsetXfo);
 
-    if (this.change) {
-      this.change.update({
-        value,
-      });
-    } else {
-      const param = this.getTargetParam();
-      param.setValue(value);
-    }
+    this.change.update({
+      value,
+    });
   }
 
   /**
@@ -1255,8 +1261,8 @@ class AxialRotationHandle extends BaseAxialRotationHandle {
 
     this.radiusParam.on('valueChanged', () => {
       radius = this.radiusParam.getValue();
-      handleGeom.getParameter('radius').setValue(radius);
-      handleGeom.getParameter('height').setValue(radius * 0.02);
+      handleGeom.getParameter('OuterRadius').setValue(radius);
+      handleGeom.getParameter('InnerRadius').setValue(radius * 0.02);
     });
 
     this.addChild(this.handle);
@@ -1342,7 +1348,7 @@ class LinearScaleHandle extends BaseLinearMovementHandle {
     this.colorParam = handleMat.getParameter('BaseColor');
     this.colorParam.setValue(color);
     const handleGeom = new zeaEngine.Cylinder(thickness, length - thickness * 10, 64);
-    handleGeom.getParameter('baseZAtZero').setValue(true);
+    handleGeom.getParameter('BaseZAtZero').setValue(true);
     const tipGeom = new zeaEngine.Cuboid(thickness * 10, thickness * 10, thickness * 10);
     const handle = new zeaEngine.GeomItem('handle', handleGeom, handleMat);
 
@@ -1411,10 +1417,9 @@ class LinearScaleHandle extends BaseLinearMovementHandle {
     this.tmplocalXfo = this.getParameter('LocalXfo').getValue();
     const param = this.getTargetParam();
     this.baseXfo = param.getValue();
-    if (event.undoRedoManager) {
-      this.change = new ParameterValueChange$1(param);
-      event.undoRedoManager.addChange(this.change);
-    }
+
+    this.change = new ParameterValueChange$1(param);
+    UndoRedoManager.getInstance().addChange(this.change);
   }
 
   /**
@@ -1444,13 +1449,9 @@ class LinearScaleHandle extends BaseLinearMovementHandle {
     this.tmplocalXfo.sc.set(1, 1, sc);
     this.getParameter('LocalXfo').setValue(this.tmplocalXfo);
 
-    if (this.change) {
-      this.change.update({
-        value: newXfo,
-      });
-    } else {
-      this.param.setValue(newXfo);
-    }
+    this.change.update({
+      value: newXfo,
+    });
   }
 
   /**
@@ -1601,10 +1602,8 @@ class SphericalRotationHandle extends Handle {
     // Hilight the material.
     this.colorParam.setValue(new zeaEngine.Color(1, 1, 1));
 
-    if (event.undoRedoManager) {
-      this.change = new ParameterValueChange(param);
-      event.undoRedoManager.addChange(this.change);
-    }
+    this.change = new ParameterValueChange(param);
+    UndoRedoManager.getInstance().addChange(this.change);
   }
 
   /**
@@ -1624,14 +1623,9 @@ class SphericalRotationHandle extends Handle {
     const newXfo = this.baseXfo.multiply(this.deltaXfo);
     const value = newXfo.multiply(this.offsetXfo);
 
-    if (this.change) {
-      this.change.update({
-        value,
-      });
-    } else {
-      const param = this.getTargetParam();
-      param.setValue(newXfo);
-    }
+    this.change.update({
+      value,
+    });
   }
 
   /**
@@ -1697,10 +1691,9 @@ class PlanarMovementHandle extends Handle {
     this.grabPos = event.grabPos;
     const param = this.getTargetParam();
     this.baseXfo = param.getValue();
-    if (event.undoRedoManager) {
-      this.change = new ParameterValueChange$1(param);
-      event.undoRedoManager.addChange(this.change);
-    }
+
+    this.change = new ParameterValueChange$1(param);
+    UndoRedoManager.getInstance().addChange(this.change);
   }
 
   /**
@@ -1714,14 +1707,9 @@ class PlanarMovementHandle extends Handle {
     const newXfo = this.baseXfo.clone();
     newXfo.tr.addInPlace(dragVec);
 
-    if (this.change) {
-      this.change.update({
-        value: newXfo,
-      });
-    } else {
-      const param = this.getTargetParam();
-      param.setValue(newXfo);
-    }
+    this.change.update({
+      value: newXfo,
+    });
   }
 
   /**
@@ -1901,7 +1889,7 @@ class XfoHandle extends zeaEngine.TreeItem {
       const planarXYWidget = new XfoPlanarMovementHandle(
         'planarXY',
         planarSize,
-        green,
+        blue,
         new zeaEngine.Vec3(planarSize * 0.5, planarSize * 0.5, 0.0)
       );
       const xfo = new zeaEngine.Xfo();
@@ -1924,7 +1912,7 @@ class XfoHandle extends zeaEngine.TreeItem {
       const planarXZWidget = new XfoPlanarMovementHandle(
         'planarXZ',
         planarSize,
-        blue,
+        green,
         new zeaEngine.Vec3(planarSize * 0.5, planarSize * 0.5, 0.0)
       );
       const xfo = new zeaEngine.Xfo();
@@ -8253,10 +8241,10 @@ class SliderHandle extends BaseLinearMovementHandle {
     this.topBarXfo = new zeaEngine.Xfo();
 
     this.barRadiusParam.on('valueChanged', () => {
-      barGeom.getParameter('radius').setValue(this.barRadiusParam.getValue());
+      barGeom.getParameter('Radius').setValue(this.barRadiusParam.getValue());
     });
     this.handleRadiusParam.on('valueChanged', () => {
-      handleGeom.getParameter('radius').setValue(this.handleRadiusParam.getValue());
+      handleGeom.getParameter('Radius').setValue(this.handleRadiusParam.getValue());
     });
     this.lengthParam.on('valueChanged', () => {
       this.__updateSlider(this.value);
@@ -8336,10 +8324,9 @@ class SliderHandle extends BaseLinearMovementHandle {
     if (!this.param) {
       return
     }
-    if (event.undoRedoManager) {
-      this.change = new ParameterValueChange$1(this.param);
-      event.undoRedoManager.addChange(this.change);
-    }
+
+    this.change = new ParameterValueChange$1(this.param);
+    UndoRedoManager.getInstance().addChange(this.change);
   }
 
   /**
@@ -8350,19 +8337,20 @@ class SliderHandle extends BaseLinearMovementHandle {
   onDrag(event) {
     const length = this.lengthParam.getValue();
     const range = this.param && this.param.getRange() ? this.param.getRange() : [0, 1];
-    const value = Math.clamp(zeaEngine.MathFunctions.remap(event.value, 0, length, range[0], range[1]), range[0], range[1]);
+    const value = zeaEngine.MathFunctions.clamp(
+      zeaEngine.MathFunctions.remap(event.value, 0, length, range[0], range[1]),
+      range[0],
+      range[1]
+    );
     if (!this.param) {
       this.__updateSlider(value);
       this.value = value;
       return
     }
-    if (this.change) {
-      this.change.update({
-        value,
-      });
-    } else {
-      this.param.setValue(value);
-    }
+
+    this.change.update({
+      value,
+    });
   }
 
   /**
@@ -8435,7 +8423,7 @@ class ArcSlider extends BaseAxialRotationHandle {
     this.hilghlightColorParam = this.addParameter(new zeaEngine.ColorParameter('Highlight Color', new zeaEngine.Color(1, 1, 1)));
 
     this.handleMat = new zeaEngine.Material('handleMat', 'HandleShader');
-    const arcGeom = new zeaEngine.Circle(arcRadius, arcAngle, 64);
+    const arcGeom = new zeaEngine.Circle(arcRadius, 64, arcAngle);
     const handleGeom = new zeaEngine.Sphere(handleRadius, 64);
 
     this.handle = new zeaEngine.GeomItem('handle', handleGeom, this.handleMat);
@@ -8446,7 +8434,7 @@ class ArcSlider extends BaseAxialRotationHandle {
     this.handle.getParameter('GeomOffsetXfo').setValue(this.handleGeomOffsetXfo);
 
     // this.barRadiusParam.on('valueChanged', () => {
-    //   arcGeom.getParameter('radius').setValue(this.barRadiusParam.getValue());
+    //   arcGeom.getParameter('Radius').setValue(this.barRadiusParam.getValue());
     // });
 
     this.range = [0, arcAngle];
@@ -8462,7 +8450,7 @@ class ArcSlider extends BaseAxialRotationHandle {
       this.handle.getParameter('GeomOffsetXfo').setValue(this.handleGeomOffsetXfo);
     });
     this.handleRadiusParam.on('valueChanged', () => {
-      handleGeom.getParameter('radius').setValue(this.handleRadiusParam.getValue());
+      handleGeom.getParameter('Radius').setValue(this.handleRadiusParam.getValue());
     });
     this.colorParam.on('valueChanged', () => {
       this.handleMat.getParameter('BaseColor').setValue(this.colorParam.getValue());
@@ -8535,6 +8523,32 @@ class ArcSlider extends BaseAxialRotationHandle {
   //   param.on('valueChanged', __updateSlider);
   // }
 
+  /**
+   * Sets global xfo target parameter
+   *
+   * @param {Parameter} param - The param param.
+   * @param {boolean} track - The track param.
+   */
+  setTargetParam(param, track = true) {
+    this.param = param;
+    if (track) {
+      if (this.param instanceof zeaEngine.XfoParameter) {
+        const __updateGizmo = () => {
+          this.getParameter('GlobalXfo').setValue(param.getValue());
+        };
+        __updateGizmo();
+        param.on('valueChanged', __updateGizmo);
+      } else if (this.param instanceof zeaEngine.NumberParameter) {
+        const __updateGizmo = () => {
+          this.handleXfo.ori.setFromAxisAndAngle(new zeaEngine.Vec3(0, 0, 1), param.getValue());
+          this.handle.getParameter('GlobalXfo').setValue(this.handleXfo);
+        };
+        __updateGizmo();
+        param.on('valueChanged', __updateGizmo);
+      }
+    }
+  }
+
   // eslint-disable-next-line require-jsdoc
   // __updateSlider(value) {
   //   this.value = value
@@ -8573,10 +8587,8 @@ class ArcSlider extends BaseAxialRotationHandle {
     // this.grabCircleRadius = this.arcRadiusParam.getValue();
     this.vec0.normalizeInPlace();
 
-    if (event.undoRedoManager) {
-      this.change = new ParameterValueChange$1(this.param);
-      event.undoRedoManager.addChange(this.change);
-    }
+    this.change = new ParameterValueChange$1(this.param);
+    UndoRedoManager.getInstance().addChange(this.change);
 
     // Hilight the material.
     this.handleGeomOffsetXfo.sc.x = this.handleGeomOffsetXfo.sc.y = this.handleGeomOffsetXfo.sc.z = 1.2;
@@ -8598,27 +8610,36 @@ class ArcSlider extends BaseAxialRotationHandle {
     if (this.vec0.cross(vec1).dot(this.baseXfo.ori.getZaxis()) < 0) angle = -angle;
 
     if (this.range) {
-      angle = Math.clamp(angle, this.range[0], this.range[1]);
+      angle = zeaEngine.MathFunctions.clamp(angle, this.range[0], this.range[1]);
     }
 
     if (event.shiftKey) {
-      // modulat the angle to X degree increments.
+      // modulate the angle to X degree increments.
       const increment = Math.degToRad(22.5);
       angle = Math.floor(angle / increment) * increment;
     }
 
-    this.deltaXfo.ori.setFromAxisAndAngle(new Vec3(0, 0, 1), angle);
+    this.deltaXfo.ori.setFromAxisAndAngle(new zeaEngine.Vec3(0, 0, 1), angle);
 
     const newXfo = this.baseXfo.multiply(this.deltaXfo);
     const value = newXfo; // .multiply(this.offsetXfo);
 
     if (this.change) {
-      this.change.update({
-        value,
-      });
+      if (this.param instanceof zeaEngine.XfoParameter) {
+        this.change.update({
+          value,
+        });
+      } else if (this.param instanceof zeaEngine.NumberParameter) {
+        this.change.update({
+          value: angle,
+        });
+      }
     } else {
-      const param = this.param ? this.param : this.getParameter('GlobalXfo');
-      param.setValue(value);
+      if (this.param instanceof zeaEngine.XfoParameter) {
+        this.param.setValue(value);
+      } else if (this.param instanceof zeaEngine.NumberParameter) {
+        this.param.setValue(angle);
+      }
     }
   }
 
@@ -8665,393 +8686,6 @@ class ArcSlider extends BaseAxialRotationHandle {
 }
 
 zeaEngine.Registry.register('ArcSlider', ArcSlider);
-
-/**
- * Kind of an abstract class, that represents the mandatory structure of a change classes that are used in the [`UndoRedoManager`]().
- *
- * @note If you don't extend this class, ensure to implement all methods specified in here.
- * @extends {EventEmitter}
- */
-class Change$1 extends zeaEngine.EventEmitter {
-  /**
-   * Every class that extends from `Change` must contain a global `name` attribute.
-   * It is used by the `UndoRedoManager` factory to re-construct the class of the specific implementation of the `Change` class.
-   *
-   * @param {string} name - The name value.
-   */
-  constructor(name) {
-    super();
-    this.name = name ? name : UndoRedoManager$1.getChangeClassName(this);
-  }
-
-  /**
-   * Called by the `UndoRedoManager` in the `undo` method, and contains the code you wanna run when the undo action is triggered,
-   * of course it depends on what you're doing.
-   *
-   * @note This method needs to be implemented, otherwise it will throw an Error.
-   */
-  undo() {
-    throw new Error('Implement me')
-  }
-
-  /**
-   * Called by the `UndoRedoManager` in the `redo` method, and is the same as the `undo` method, contains the specific code you wanna run.
-   *
-   * @note This method needs to be implemented, otherwise it will throw an Error.
-   */
-  redo() {
-    throw new Error('Implement me')
-  }
-
-  /**
-   * Use this method to update the state of your `Change` class.
-   *
-   * @note This method needs to be implemented, otherwise it will throw an Error.
-   *
-   * @param {object|string|any} updateData - The updateData param.
-   */
-  update(updateData) {
-    throw new Error('Implement me')
-  }
-
-  /**
-   * Serializes the `Change` instance as a JSON object, allowing persistence/replication
-   *
-   * @note This method needs to be implemented, otherwise it will return an empty object.
-   *
-   * @param {object} context - The appData param.
-   * @return {object} The return value.
-   */
-  toJSON(context) {
-    return {}
-  }
-
-  /**
-   * The counterpart of the `toJSON` method, restoring `Change` instance's state with the specified JSON object.
-   * Each `Change` class must implement the logic for reconstructing itself.
-   * Very often used to restore from persisted/replicated JSON.
-   *
-   * @note This method needs to be implemented, otherwise it will do nothing.
-   *
-   * @param {object} j - The j param.
-   * @param {object} context - The context param.
-   */
-  fromJSON(j, context) {}
-
-  /**
-   * Useful method to update the state of an existing identified `Change` through replication.
-   *
-   * @note By default it calls the `update` method in the `Change` class, but you can override this if you need to.
-   *
-   * @param {object} j - The j param.
-   */
-  changeFromJSON(j) {
-    // Many change objects can load json directly
-    // in the update method.
-    this.update(j);
-  }
-
-  /**
-   * Method destined to clean up things that would need to be cleaned manually.
-   * It is executed when flushing the undo/redo stacks or adding a new change to the undo stack,
-   * so it is require in any class that represents a change.
-   *
-   */
-  destroy() {}
-}
-
-const __changeClasses$1 = {};
-const __classNames$1 = {};
-const __classes$1 = [];
-
-/**
- * `UndoRedoManager` is a mixture of the [Factory Design Pattern](https://en.wikipedia.org/wiki/Factory_method_pattern) and the actual changes stacks manager.
- * This is the heart of the Undo/Redo System, letting you navigate through the changes history you've saved.
- *
- * **Events**
- * * **changeAdded:** Triggered when a change is added.
- * * **changeUpdated:** Triggered when the last change added updates its state.
- * * **changeUndone:** Triggered when the `undo` method is called, after removing the last change from the stack.
- * * **changeRedone:** Triggered when the `redo` method is called, after restoring the last change removed from the undo stack.
- * */
-class UndoRedoManager$1 extends zeaEngine.EventEmitter {
-  /**
-   * It doesn't have any parameters, but under the hood it uses [EventsEmitter]() to notify subscribers when something happens.
-   * The implementation is really simple, just initialize it like any other class.
-   */
-  constructor() {
-    super();
-    this.__undoStack = [];
-    this.__redoStack = [];
-    this.__currChange = null;
-
-    this.__currChangeUpdated = this.__currChangeUpdated.bind(this);
-  }
-
-  /**
-   * As the name indicates, it empties undo/redo stacks permanently, losing all stored actions.
-   * Right now, before flushing the stacks it calls the `destroy` method on all changes, ensure to at least declare it.
-   */
-  flush() {
-    for (const change of this.__undoStack) change.destroy();
-    this.__undoStack = [];
-    for (const change of this.__redoStack) change.destroy();
-    this.__redoStack = [];
-    if (this.__currChange) {
-      this.__currChange.off('updated', this.__currChangeUpdated);
-      this.__currChange = null;
-    }
-  }
-
-  /**
-   * Receives an instance of a class that extends or has the same structure as `Change` class.
-   * When this action happens, the last added change update notifications will get disconnected.
-   * Which implies that any future updates to changes that are not the last one, would need a new call to the `addChange` method.
-   * Also, resets the redo stack(Calls destroy method when doing it).
-   *
-   * @param {Change} change - The change param.
-   */
-  addChange(change) {
-    // console.log("AddChange:", change.name)
-    if (!(change instanceof Change$1)) console.warn('Change object is not derived from Change.');
-    if (this.__currChange && this.__currChange.off) {
-      this.__currChange.off('updated', this.__currChangeUpdated);
-    }
-
-    this.__undoStack.push(change);
-    this.__currChange = change;
-    if (this.__currChange.on) this.__currChange.on('updated', this.__currChangeUpdated);
-
-    for (const change of this.__redoStack) change.destroy();
-    this.__redoStack = [];
-
-    this.emit('changeAdded', { change });
-  }
-
-  /**
-   * Returns the last change added to the undo stack, but in case it is empty a `null` is returned.
-   *
-   * @return {Change|null} The return value.
-   */
-  getCurrentChange() {
-    return this.__currChange
-  }
-
-  /**
-   * @private
-   * @param {object|any} updateData
-   */
-  __currChangeUpdated(updateData) {
-    this.emit('changeUpdated', updateData);
-  }
-
-  /**
-   * Rollback the latest action, passing it to the redo stack in case you wanna recover it later on.
-   *
-   * @param {boolean} pushOnRedoStack - The pushOnRedoStack param.
-   */
-  undo(pushOnRedoStack = true) {
-    if (this.__undoStack.length > 0) {
-      if (this.__currChange) {
-        this.__currChange.off('updated', this.__currChangeUpdated);
-        this.__currChange = null;
-      }
-
-      const change = this.__undoStack.pop();
-      // console.log("undo:", change.name)
-      change.undo();
-      if (pushOnRedoStack) {
-        this.__redoStack.push(change);
-        this.emit('changeUndone');
-      }
-    }
-  }
-
-  /**
-   * Rollbacks the `undo` action by moving the change from the `redo` stack to the `undo` stack.
-   * Emits the `changeRedone` event, if you want to subscribe to it.
-   */
-  redo() {
-    if (this.__redoStack.length > 0) {
-      const change = this.__redoStack.pop();
-      // console.log("redo:", change.name)
-      change.redo();
-      this.__undoStack.push(change);
-      this.emit('changeRedone');
-    }
-  }
-
-  // //////////////////////////////////
-  // User Synchronization
-
-  /**
-   * Basically returns a new instance of the derived `Change` class. This is why we need the `name` attribute.
-   *
-   * @param {string} className - The className param.
-   * @return {Change} - The return value.
-   */
-  constructChange(className) {
-    return new __changeClasses$1[className]()
-  }
-
-  /**
-   * Checks if a class of an instantiated object is registered in the UndoRedo Factory.
-   *
-   * @param {Change} inst - The instance of the Change class.
-   * @return {boolean} - Returns 'true' if the class has been registered.
-   */
-  static isChangeClassRegistered(inst) {
-    const id = __classes$1.indexOf(inst.constructor);
-    return id != -1
-  }
-
-  /**
-   * Very simple method that returns the name of the instantiated class, checking first in the registry and returning if found,
-   * if not then checks the `name` attribute declared in constructor.
-   *
-   * @param {Change} inst - The instance of the Change class.
-   * @return {string} - The return value.
-   */
-  static getChangeClassName(inst) {
-    const id = __classes$1.indexOf(inst.constructor);
-    if (__classNames$1[id]) return __classNames$1[id]
-    console.warn('Change not registered:', inst.constructor.name);
-    return ''
-  }
-
-  /**
-   * Registers the class in the UndoRedoManager Factory.
-   * Why do we need to specify the name of the class?
-   * Because when the code is transpiled, the defined class names change, so it won't be known as we declared it anymore.
-   *
-   * @param {string} name - The name param.
-   * @param {Change} cls - The cls param.
-   */
-  static registerChange(name, cls) {
-    if (__classes$1.indexOf(cls) != -1) console.warn('Class already registered:', name);
-
-    const id = __classes$1.length;
-    __classes$1.push(cls);
-    __changeClasses$1[name] = cls;
-    __classNames$1[id] = name;
-  }
-}
-
-/**
- * Represents a `Change` class for storing `Parameter` values.
- *
- * **Events**
- * * **updated:** Triggered when the `ParameterValueChange` value is updated.
- *
- * @extends Change
- */
-class ParameterValueChange$2 extends Change$1 {
-  /**
-   * Creates an instance of ParameterValueChange.
-   *
-   * @param {Parameter} param - The param value.
-   * @param {object|string|number|any} newValue - The newValue value.
-   */
-  constructor(param, newValue) {
-    if (param) {
-      super(param ? param.getName() + ' Changed' : 'ParameterValueChange');
-      this.__prevValue = param.getValue();
-      this.__param = param;
-      if (newValue != undefined) {
-        this.__nextValue = newValue;
-        this.__param.setValue(this.__nextValue);
-      }
-    } else {
-      super();
-    }
-  }
-
-  /**
-   * Rollbacks the value of the parameter to the previous one, passing it to the redo stack in case you wanna recover it later on.
-   */
-  undo() {
-    if (!this.__param) return
-    this.__param.setValue(this.__prevValue);
-  }
-
-  /**
-   * Rollbacks the `undo` action by moving the change from the `redo` stack to the `undo` stack
-   * and updating the parameter with the new value.
-   */
-  redo() {
-    if (!this.__param) return
-    this.__param.setValue(this.__nextValue);
-  }
-
-  /**
-   * Updates the state of the current parameter change value.
-   *
-   * @param {Parameter} updateData - The updateData param.
-   */
-  update(updateData) {
-    if (!this.__param) return
-    this.__nextValue = updateData.value;
-    this.__param.setValue(this.__nextValue);
-    this.emit('updated', updateData);
-  }
-
-  /**
-   * Serializes `Parameter` instance value as a JSON object, allowing persistence/replication.
-   *
-   * @param {object} context - The context param.
-   * @return {object} The return value.
-   */
-  toJSON(context) {
-    const j = {
-      name: this.name,
-      paramPath: this.__param.getPath(),
-    };
-
-    if (this.__nextValue != undefined) {
-      if (this.__nextValue.toJSON) {
-        j.value = this.__nextValue.toJSON();
-      } else {
-        j.value = this.__nextValue;
-      }
-    }
-    return j
-  }
-
-  /**
-   * Restores `Parameter` instance's state with the specified JSON object.
-   *
-   * @param {object} j - The j param.
-   * @param {object} context - The context param.
-   */
-  fromJSON(j, context) {
-    const param = context.appData.scene.getRoot().resolvePath(j.paramPath, 1);
-    if (!param || !(param instanceof zeaEngine.Parameter)) {
-      console.warn('resolvePath is unable to resolve', j.paramPath);
-      return
-    }
-    this.__param = param;
-    this.__prevValue = this.__param.getValue();
-    if (this.__prevValue.clone) this.__nextValue = this.__prevValue.clone();
-    else this.__nextValue = this.__prevValue;
-
-    this.name = j.name;
-    if (j.value != undefined) this.changeFromJSON(j);
-  }
-
-  /**
-   * Updates the state of an existing identified `Parameter` through replication.
-   *
-   * @param {object} j - The j param.
-   */
-  changeFromJSON(j) {
-    if (!this.__param) return
-    if (this.__nextValue.fromJSON) this.__nextValue.fromJSON(j.value);
-    else this.__nextValue = j.value;
-    this.__param.setValue(this.__nextValue);
-  }
-}
-
-UndoRedoManager$1.registerChange('ParameterValueChange', ParameterValueChange$2);
 
 /**
  * Class representing a planar movement scene widget.
@@ -9154,10 +8788,9 @@ class ScreenSpaceMovementHandle extends Handle {
     this.grabPos = event.grabPos;
     const param = this.getTargetParam();
     this.baseXfo = param.getValue();
-    if (event.undoRedoManager) {
-      this.change = new ParameterValueChange$2(param);
-      event.undoRedoManager.addChange(this.change);
-    }
+
+    this.change = new ParameterValueChange$1(param);
+    UndoRedoManager.getInstance().addChange(this.change);
   }
 
   /**
@@ -9171,14 +8804,9 @@ class ScreenSpaceMovementHandle extends Handle {
     const newXfo = this.baseXfo.clone();
     newXfo.tr.addInPlace(dragVec);
 
-    if (this.change) {
-      this.change.update({
-        value: newXfo,
-      });
-    } else {
-      const param = this.getTargetParam();
-      param.setValue(newXfo);
-    }
+    this.change.update({
+      value: newXfo,
+    });
   }
 
   /**
@@ -9227,3 +8855,4 @@ exports.VIEW_TOOL_MODELS = VIEW_TOOL_MODELS;
 exports.VRHoldObjectsTool = VRHoldObjectsTool;
 exports.VRUITool = VRUITool;
 exports.ViewTool = ViewTool;
+//# sourceMappingURL=index.cjs.js.map
