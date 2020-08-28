@@ -18,21 +18,19 @@ const loadModel = (appData) => {
 
   const treeItem = new TreeItem('tree')
 
-  ////////////////////////////////////
-  // // Load the Robot Model
+  // ///////////////////////////////////////
+  // Load the Robot Model
   const asset = new CADAsset('MC700_ASSY')
   asset.getParameter('DataFilePath').setUrl('data/MC700_ASSY.zcad')
 
   treeItem.addChild(asset)
-
-  ////////////////////////////////////
-  // Load the Kinematics
 
   // ///////////////////////////////////////
   // Setup the Solver
   const ikSolver = new IKSolver('ikSolver')
   ikSolver.getParameter('Iterations').setValue(40)
   treeItem.addChild(ikSolver)
+  treeItem.addChild(ikSolver.debugTree)
 
   const targGeom = new Cuboid(0.05, 0.1, 0.1)
   const targGeomMaterial = new Material('targGeomMaterial', 'SimpleSurfaceShader')
@@ -41,19 +39,19 @@ const loadModel = (appData) => {
   treeItem.addChild(targGeomItem)
   ikSolver.getInput('Target').setParam(targGeomItem.getParameter('GlobalXfo'))
 
-  ///////////////////////////////////////
+  // ///////////////////////////////////////
   // Setup the joints
 
   const jointMaterial = new Material('Joint0', 'SimpleSurfaceShader')
   jointMaterial.getParameter('BaseColor').setValue(new Color(1, 0, 0))
 
-  function addJoint(name, axis) {
+  function addJoint(name, axis, limits) {
     // const joint = asset.getChildByName(name);
     const joint = new Group(name)
     joint.getParameter('Material').setValue(jointMaterial)
     treeItem.addChild(joint)
     joint.addItem(asset.getChildByName(name))
-    ikSolver.addJoint(joint.getParameter('GlobalXfo'), axis)
+    ikSolver.addJoint(joint.getParameter('GlobalXfo'), axis, limits)
     return joint
   }
 
@@ -77,36 +75,23 @@ const loadModel = (appData) => {
   }
 
   asset.on('loaded', () => {
-    const materialLibrary = asset.getMaterialLibrary()
-
-    // const joint = new Group(name);
-    // ikSolver.getInput("Target").setParam(targGeomItem.getParameter("GlobalXfo"));
-
-    addJoint('NAUO1', 2)
-    addJoint('NAUO6', 1)
-    addJoint('NAUO16', 1)
+    addJoint('NAUO1', 2, [-140, 140])
+    addJoint('NAUO6', 1, [-60, 105])
+    addJoint('NAUO16', 1, [-60, 80])
     addJoint('NAUO7', 0)
-    addJoint('NAUO17', 1)
+    addJoint('NAUO17', 1, [-90, 90])
     addJoint('NAUO15', 0)
 
-    /////////////////////////////////////////
+    // ///////////////////////////////////////
     // Setup the Target
 
     const targXfo = asset.getChildByName('NAUO15').getParameter('GlobalXfo').getValue().clone()
     targXfo.sc.set(1, 1, 1)
-    // targXfo.tr = targXfo.ori.rotateVec3(new Vec3(1, 1, 1))
-    // targXfo.ori.setFromAxisAndAngle(new Vec3(0, 1, 0), Math.PI * 0.5);
-    const align = new Quat()
-    // align.setFromAxisAndAngle(new Vec3(0, 1, 0), -0.5)
-    // targXfo.ori = align.multiply(targXfo.ori)
-    // align.setFromAxisAndAngle(new Vec3(0, 0, 1), 0.5)
-    // targXfo.ori = align.multiply(targXfo.ori)
-    // console.log(targXfo.ori.rotateVec3(new Vec3(1, 0, 0)).toString())
     targGeomItem.getParameter('GlobalXfo').setValue(targXfo)
 
     ikSolver.enable()
 
-    /////////////////////////////////////////
+    // ///////////////////////////////////////
     // Setup Counterweight
     const counterweightGroup = new Group('NAUO4')
     counterweightGroup.addItem(asset.getChildByName('NAUO4'))
@@ -124,7 +109,7 @@ const loadModel = (appData) => {
     counterweightOp.enable()
     treeItem.addChild(counterweightOp)
 
-    /////////////////////////////////////////
+    // ///////////////////////////////////////
     // Setup pistons
     addRamAndPiston('NAUO10', 'NAUO1', 'NAUO11', 'NAUO6', 1)
     addRamAndPiston('NAUO8', 'NAUO1', 'NAUO9', 'NAUO6', 1)

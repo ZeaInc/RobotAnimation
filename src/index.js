@@ -1,4 +1,4 @@
-import { Vec3, Color, EnvMap, Scene, GLRenderer } from '../libs/zea-engine/dist/index.esm.js'
+import { Vec3, Color, Group, EnvMap, Scene, GLRenderer } from '../libs/zea-engine/dist/index.esm.js'
 
 const domElement = document.getElementById('viewport')
 
@@ -28,6 +28,8 @@ envMap.getParameter('FilePath').setUrl('./data/HDR_029_Sky_Cloudy_Ref.vlenv')
 
 scene.setEnvMap(envMap)
 
+const urlParams = new URLSearchParams(window.location.search)
+
 ////////////////////////////////////
 // Load the Model
 import loadModel from './2.loadModel.js'
@@ -37,14 +39,18 @@ scene.getRoot().addChild(treeItem)
 ////////////////////////////////////
 // Point Cloud renderer
 import loadPointCloud from './1.loadPointCloud.js'
-const pointCloud = loadPointCloud(appData)
-scene.getRoot().addChild(pointCloud)
+if (!urlParams.has('nopoints')) {
+  const pointCloud = loadPointCloud(appData)
+  scene.getRoot().addChild(pointCloud)
+}
 
 ////////////////////////////////////
 // Setup Animation
 
 import setupAnimation from './3.setupAnimation.js'
-setupAnimation(treeItem)
+if (!urlParams.has('noanim')) {
+  setupAnimation(treeItem)
+}
 
 ////////////////////////////////////
 // Setup the Left side Tree view.
@@ -64,7 +70,7 @@ appData.selectionManager = new SelectionManager(appData, {
 appData.selectionManager.on('selectionChanged', (event) => {
   event.selection.forEach((item) => console.log(item.getPath()))
 })
-appData.undoRedoManager = new UndoRedoManager()
+appData.undoRedoManager = UndoRedoManager.getInstance()
 appData.toolManager = new ToolManager(appData)
 
 renderer.setUndoRedoManager(appData.undoRedoManager)
@@ -103,37 +109,39 @@ let currKey
 document.addEventListener('keydown', (event) => {
   if (event.key.toLowerCase() == currKey) return
   switch (event.key.toLowerCase()) {
-    case 'f': {
+    case 'f':
       renderer.frameAll()
       break
-    }
-    case 's': {
-      if (selectItemsActivated) {
-        appData.toolManager.popTool()
-        selectItemsActivated = false
-      } else {
-        appData.toolManager.pushTool(selectionTool)
-        selectItemsActivated = true
-        selectItemsActivatedTime = performance.now()
+    case 's':
+      if (!event.ctrlKey) {
+        if (selectItemsActivated) {
+          appData.toolManager.popTool()
+          selectItemsActivated = false
+        } else {
+          appData.toolManager.pushTool(selectionTool)
+          selectItemsActivated = true
+          selectItemsActivatedTime = performance.now()
+        }
       }
       break
-    }
-    case 'w': {
+    case 'w':
       appData.selectionManager.showHandles('Translate')
       break
-    }
-    case 'e': {
+    case 'e':
       appData.selectionManager.showHandles('Rotate')
       break
-    }
-    case 'z': {
+    case 'z':
       if (event.ctrlKey) appData.undoRedoManager.undo()
       break
-    }
-    case 'y': {
+    case 'y':
       if (event.ctrlKey) appData.undoRedoManager.undo()
       break
-    }
+    case 'g':
+      appData.selectionManager.setXfoMode(Group.INITIAL_XFO_MODES.globalOri)
+      break
+    case 'l':
+      appData.selectionManager.setXfoMode(Group.INITIAL_XFO_MODES.average)
+      break
   }
   currKey = event.key.toLowerCase()
 })

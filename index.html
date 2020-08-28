@@ -8,16 +8,6 @@
     <link rel="stylesheet" type="text/css" href="./src/App.css">
     <script type="module" src="./libs/zea-web-components/dist/zeainc-zea-web-components/zeainc-zea-web-components.esm.js"></script>
     <link rel="stylesheet" href="./libs/zea-web-components/dist/zeainc-zea-web-components/zeainc-zea-web-components.css"></link>
-    <!-- <style type="text/css">
-      html,
-      body {
-        overflow: hidden;
-        height: 100%;
-        width: 100%;
-        margin: 0;
-        padding: 0;
-      }
-    </style> -->
   </head>
   <body>
     <div class="App">
@@ -26,7 +16,7 @@
       cell-a-size="45"
       resize-cell-a="false"
       cell-b-size="100%"
-      cell-c-size="5px"
+      cell-c-size="30px"
       resize-cell-c="false"
     >
       <div slot="a" class="App-header">
@@ -37,38 +27,13 @@
         <div class="MenuHolder">
           <zea-menu type="dropdown" show-anchor="true">
             <zea-menu-item>
-              Rendering Style
+              Edit
               <zea-menu-subitems>
                 <zea-menu-item class="MenuItem" id="RealisticRendering">
-                  <zea-icon name="eye"></zea-icon>Realistic
+                  Undo
                 </zea-menu-item>
                 <zea-menu-item class="MenuItem" id="IllustrationRendering">
-                  <zea-icon name="eye"></zea-icon>Illustration
-                </zea-menu-item>
-              </zea-menu-subitems>
-            </zea-menu-item>
-            <zea-menu-item>
-              Cutting Plane
-              <zea-menu-subitems>
-                <zea-menu-item class="MenuItem">
-                  <zea-icon></zea-icon> On
-                </zea-menu-item>
-              </zea-menu-subitems>
-            </zea-menu-item>
-            <zea-menu-item>
-              Level of detail
-              <zea-menu-subitems>
-                <zea-menu-item class="MenuItem">
-                  <zea-icon></zea-icon>Level 0 : Mobile
-                </zea-menu-item>
-                <zea-menu-item class="MenuItem">
-                  <zea-icon></zea-icon>Level 1 : Ultrabook
-                </zea-menu-item>
-                <zea-menu-item class="MenuItem">
-                  <zea-icon></zea-icon>Level 2 : Laptop
-                </zea-menu-item>
-                <zea-menu-item class="MenuItem">
-                  <zea-icon></zea-icon>Level 3 : Workstation
+                  Redo
                 </zea-menu-item>
               </zea-menu-subitems>
             </zea-menu-item>
@@ -91,11 +56,18 @@
         <div slot="b" id="viewport"></div>
         <zea-scroll-pane slot="c"></zea-scroll-pane>
       </zea-layout>
+      <div id="timecontrols" slot="c">
+        <div id="timeline">
+          <div id="timebar"></div>
+        </div>
+        <div id="prevkey"><</div>
+        <div id="nextkey">></div>
+      </div>
     </zea-layout>
   </div>
   </body>
   <script type="module" src="./src/index.js"></script>
   <!-- Start of HubSpot Embed Code -->
-  <script type="text/javascript" id="hs-script-loader" async defer src="//js.hs-scripts.com/7161066.js"></script>
+  <!-- <script type="text/javascript" id="hs-script-loader" async defer src="//js.hs-scripts.com/7161066.js"></script> -->
   <!-- End of HubSpot Embed Code -->
 </html>
