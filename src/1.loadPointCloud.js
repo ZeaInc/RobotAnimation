@@ -1,5 +1,5 @@
-import { Vec3, PassType } from '../libs/zea-engine/dist/index.esm.js'
-import { PointCloudAsset, GLPointCloudPass } from '../libs/zea-pointclouds/dist/index.rawimport.js'
+import { Vec3, PassType } from '@zeainc/zea-engine'
+import { PointCloudAsset, GLPointCloudPass } from '@zeainc/zea-pointclouds'
 
 const loadPointCloud = (appData) => {
   const pointcloudPass = new GLPointCloudPass()
@@ -12,7 +12,6 @@ const loadPointCloud = (appData) => {
   pointcloud.loadPointCloud(pointCloudUrl, 'PointCloud').then((e) => {
     const xfoParam = pointcloud.getParameter('GlobalXfo')
     const xfo = xfoParam.getValue()
-    console.log(xfo.toString())
     xfo.tr.addInPlace(new Vec3(17, 15, 0))
     xfoParam.setValue(xfo)
   })

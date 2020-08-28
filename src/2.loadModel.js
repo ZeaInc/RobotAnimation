@@ -1,15 +1,6 @@
-import {
-  Quat,
-  Color,
-  Group,
-  Material,
-  TreeItem,
-  GeomItem,
-  Cuboid,
-  PassType,
-} from '../libs/zea-engine/dist/index.esm.js'
-import { GLCADPass, CADAsset } from '../libs/zea-cad/dist/index.rawimport.js'
-import { IKSolver, TriangleIKSolver, RamAndPistonOperator } from '../libs/zea-kinematics/dist/index.rawimport.js'
+import { Quat, Color, Group, Material, TreeItem, GeomItem, Cuboid, PassType } from '@zeainc/zea-engine'
+import { GLCADPass, CADAsset } from '@zeainc/zea-cad'
+import { IKSolver, TriangleIKSolver, RamAndPistonOperator } from '@zeainc/zea-kinematics'
 
 const loadModel = (appData) => {
   const cadPass = new GLCADPass(true)

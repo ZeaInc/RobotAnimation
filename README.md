@@ -1,3 +1,3 @@
-# ROBOT PLANNING
+# ROBOT ANIMATION
 
-Sample application demonstrating ....
+This sample app

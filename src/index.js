@@ -1,4 +1,4 @@
-import { Vec3, Color, Group, EnvMap, Scene, GLRenderer } from '../libs/zea-engine/dist/index.esm.js'
+import { Vec3, Color, Group, EnvMap, Scene, GLRenderer } from '@zeainc/zea-engine'
 
 const domElement = document.getElementById('viewport')
 
@@ -55,14 +55,7 @@ if (!urlParams.has('noanim')) {
 ////////////////////////////////////
 // Setup the Left side Tree view.
 
-import {
-  SelectionManager,
-  ToolManager,
-  ViewTool,
-  HandleTool,
-  SelectionTool,
-  UndoRedoManager,
-} from '../libs/zea-ux/dist/index.rawimport.js'
+import { SelectionManager, ToolManager, ViewTool, HandleTool, SelectionTool, UndoRedoManager } from '@zeainc/zea-ux'
 
 appData.selectionManager = new SelectionManager(appData, {
   enableXfoHandles: true,
@@ -174,7 +167,7 @@ sceneTreeView.rootItem = scene.getRoot()
 
 ////////////////////////////////////
 // Setup Collaboration
-// import { Session, SessionSync } from "../libs/zea-collab/dist/index.rawimport.js"
+// import { Session, SessionSync } from "@zeainc/zea-collab"
 
 // const urlParams = new URLSearchParams(window.location.search);
 // let userId = urlParams.get('user-id');

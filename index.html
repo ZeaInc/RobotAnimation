@@ -2,71 +2,67 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="shortcut icon" href="img/favicon-32x32.png" type="image/x-icon">
+    <link rel="shortcut icon" href="img/favicon-32x32.png" type="image/x-icon" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Zea - Robot Animation</title>
-    <link rel="stylesheet" type="text/css" href="./src/App.css">
-    <script type="module" src="./libs/zea-web-components/dist/zeainc-zea-web-components/zeainc-zea-web-components.esm.js"></script>
-    <link rel="stylesheet" href="./libs/zea-web-components/dist/zeainc-zea-web-components/zeainc-zea-web-components.css"></link>
+    <link rel="stylesheet" type="text/css" href="./src/App.css" />
+    <script
+      src="http://unpkg.com/@zeainc/zea-web-components/dist/zeainc-zea-web-components/zeainc-zea-web-components.js"
+      type="module"
+    ></script>
   </head>
   <body>
     <div class="App">
-    <zea-layout
-      orientation="vertical"
-      cell-a-size="45"
-      resize-cell-a="false"
-      cell-b-size="100%"
-      cell-c-size="30px"
-      resize-cell-c="false"
-    >
-      <div slot="a" class="App-header">
-        <img class="App-logo" src="img/logo-zea.svg" height="30px"/>
-        <div class="UserChipSetHolder">
-          <zea-user-chip-set id="zea-user-chip-set"></zea-user-chip-set>
+      <zea-layout
+        orientation="vertical"
+        cell-a-size="45"
+        resize-cell-a="false"
+        cell-b-size="100%"
+        cell-c-size="30px"
+        resize-cell-c="false"
+      >
+        <div slot="a" class="App-header">
+          <img class="App-logo" src="img/logo-zea.svg" height="30px" />
+          <div class="UserChipSetHolder">
+            <zea-user-chip-set id="zea-user-chip-set"></zea-user-chip-set>
+          </div>
+          <div class="MenuHolder">
+            <zea-menu type="dropdown" show-anchor="true">
+              <zea-menu-item>
+                Edit
+                <zea-menu-subitems>
+                  <zea-menu-item class="MenuItem" id="RealisticRendering"> Undo </zea-menu-item>
+                  <zea-menu-item class="MenuItem" id="IllustrationRendering"> Redo </zea-menu-item>
+                </zea-menu-subitems>
+              </zea-menu-item>
+              <zea-menu-item>
+                VR
+                <zea-menu-subitems>
+                  <zea-menu-item class="MenuItem"> <zea-icon></zea-icon>Launch VR </zea-menu-item>
+                </zea-menu-subitems>
+              </zea-menu-item>
+            </zea-menu>
+          </div>
+          <zea-user-chip id="zea-user-chip"></zea-user-chip>
         </div>
-        <div class="MenuHolder">
-          <zea-menu type="dropdown" show-anchor="true">
-            <zea-menu-item>
-              Edit
-              <zea-menu-subitems>
-                <zea-menu-item class="MenuItem" id="RealisticRendering">
-                  Undo
-                </zea-menu-item>
-                <zea-menu-item class="MenuItem" id="IllustrationRendering">
-                  Redo
-                </zea-menu-item>
-              </zea-menu-subitems>
-            </zea-menu-item>
-            <zea-menu-item>
-              VR
-              <zea-menu-subitems>
-                <zea-menu-item class="MenuItem">
-                  <zea-icon></zea-icon>Launch VR
-                </zea-menu-item>
-              </zea-menu-subitems>
-            </zea-menu-item>
-          </zea-menu>
+        <zea-layout slot="b" cell-a-size="200" cell-b-size="100%" cell-c-size="5px" resize-cell-c="false">
+          <zea-scroll-pane slot="a">
+            <zea-tree-view id="zea-tree-view"></zea-tree-view>
+          </zea-scroll-pane>
+          <div slot="b" id="viewport"></div>
+          <zea-scroll-pane slot="c"></zea-scroll-pane>
+        </zea-layout>
+        <div id="timecontrols" slot="c">
+          <div id="timeline">
+            <div id="timebar"></div>
+          </div>
+          <div id="prevkey"><</div>
+          <div id="nextkey">></div>
         </div>
-        <zea-user-chip id="zea-user-chip"></zea-user-chip> 
-      </div>
-      <zea-layout slot="b" cell-a-size="200" cell-b-size="100%" cell-c-size="5px" resize-cell-c="false">
-        <zea-scroll-pane slot="a">
-          <zea-tree-view id="zea-tree-view"></zea-tree-view>
-        </zea-scroll-pane>
-        <div slot="b" id="viewport"></div>
-        <zea-scroll-pane slot="c"></zea-scroll-pane>
       </zea-layout>
-      <div id="timecontrols" slot="c">
-        <div id="timeline">
-          <div id="timebar"></div>
-        </div>
-        <div id="prevkey"><</div>
-        <div id="nextkey">></div>
-      </div>
-    </zea-layout>
-  </div>
+    </div>
   </body>
-  <script type="module" src="./src/index.js"></script>
+  <script src="./dist/main.js"></script>
   <!-- Start of HubSpot Embed Code -->
   <!-- <script type="text/javascript" id="hs-script-loader" async defer src="//js.hs-scripts.com/7161066.js"></script> -->
   <!-- End of HubSpot Embed Code -->

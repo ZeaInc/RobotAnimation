@@ -1,20 +1,5 @@
-import {
-  Vec3,
-  Quat,
-  Xfo,
-  Color,
-  NumberParameter,
-  Material,
-  Cuboid,
-  GeomItem,
-  MathFunctions,
-} from '../libs/zea-engine/dist/index.esm.js'
-import {
-  XfoTrack,
-  TrackSampler,
-  XfoTrackDisplay,
-  AttachmentConstraint,
-} from '../libs/zea-kinematics/dist/index.rawimport.js'
+import { Vec3, Quat, Xfo, Color, NumberParameter, Material, Cuboid, GeomItem, MathFunctions } from '@zeainc/zea-engine'
+import { XfoTrack, TrackSampler, XfoTrackDisplay, AttachmentConstraint } from '@zeainc/zea-kinematics'
 
 const setupAnimation = (treeItem) => {
   const timeParam = new NumberParameter('time', 0)
