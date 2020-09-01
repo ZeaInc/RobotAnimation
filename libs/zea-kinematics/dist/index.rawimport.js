@@ -1321,10 +1321,11 @@ Registry.register('AttachmentConstraint', AttachmentConstraint);
 /** Class representing a gear parameter.
  * @extends BaseTrack
  */
-class BaseTrack extends EventEmitter {
-  constructor(name) {
+class BaseTrack$1 extends EventEmitter {
+  constructor(name, owner) {
     super();
     this.name = name;
+    this.owner = owner;
     this.keys = [];
     this.__sampleCache = {};
 
@@ -1335,6 +1336,18 @@ class BaseTrack extends EventEmitter {
 
   getName() {
     return this.name
+  }
+
+  getOwner() {
+    return this.owner
+  }
+
+  setOwner(owner) {
+    this.owner = owner;
+  }
+
+  getPath() {
+    return [...this.owner.getPath(), name]
   }
 
   getNumKeys() {
@@ -1350,6 +1363,12 @@ class BaseTrack extends EventEmitter {
   }
 
   setKeyValue(index, value) {
+    this.keys[index].value = value;
+    this.emit('keyChanged', { index });
+  }
+
+  setKeyTimeAndValue(index, time, value) {
+    this.keys[index].time = time;
     this.keys[index].value = value;
     this.emit('keyChanged', { index });
   }
@@ -1512,7 +1531,7 @@ class BaseTrack extends EventEmitter {
   }
 }
 
-class ColorTrack extends BaseTrack {
+class ColorTrack extends BaseTrack$1 {
   constructor(name) {
     super(name);
   }
@@ -1530,7 +1549,7 @@ class ColorTrack extends BaseTrack {
   }
 }
 
-class XfoTrack extends BaseTrack {
+class XfoTrack extends BaseTrack$1 {
   constructor(name) {
     super(name);
   }
@@ -1563,16 +1582,25 @@ Registry.register('XfoTrack', XfoTrack);
 
 class AddKeyChange extends Change {
   constructor(track, time, value) {
-    super(`Add Key to ${track.getName()}`);
-    this.track = track;
-    this.time = time;
-    this.value = value;
-    this.index = track.addKey(time, value);
+    super(`Add Key to ${track ? track.getName() : 'track'}`);
+
+    if (track != undefined && time != undefined && value != undefined) {
+      this.track = track;
+      this.time = time;
+      this.value = value;
+      this.index = track.addKey(this.time, this.value);
+    } else {
+      super();
+    }
   }
 
   update(value) {
     this.value = value;
     this.track.setKeyValue(this.index, this.value);
+
+    this.emit('updated', {
+      value: this.value
+    });
   }
 
   undo() {
@@ -1582,23 +1610,98 @@ class AddKeyChange extends Change {
   redo() {
     this.track.addKey(this.time, this.value);
   }
+
+  /**
+   * Serializes `Parameter` instance value as a JSON object, allowing persistence/replication.
+   *
+   * @param {object} context - The context param.
+   * @return {object} The return value.
+   */
+  toJSON(context) {
+    const j = {
+      name: this.name,
+      trackPath: this.track.getPath(),
+      time: this.time
+    };
+
+    if (this.value != undefined) {
+      if (this.value.toJSON) {
+        j.value = this.value.toJSON();
+      } else {
+        j.value = this.value;
+      }
+    }
+    return j
+  }
+
+  /**
+   * Restores `Parameter` instance's state with the specified JSON object.
+   *
+   * @param {object} j - The j param.
+   * @param {object} context - The context param.
+   */
+  fromJSON(j, context) {
+    const track = context.appData.scene.getRoot().resolvePath(j.trackPath, 1);
+    if (!track || !(track instanceof BaseTrack$1)) {
+      console.warn('resolvePath is unable to resolve', j.trackPath);
+      return
+    }
+    this.name = `Add Key to ${track.getName()}`;
+    this.track = track;
+    const key = this.track.loadKeyJSON(j);
+    this.time = key.time;
+    this.value = key.value;
+    this.index = this.track.addKey(key.time, key.value);
+  }
+
+  /**
+   * Updates the state of an existing identified `Parameter` through replication.
+   *
+   * @param {object} j - The j param.
+   */
+  changeFromJSON(j) {
+    if (!this.track) return
+    if (j.value) {
+      this.value = j.value;
+      this.track.setKeyValue(this.index, this.value);
+    }
+  }
 }
 
 UndoRedoManager.registerChange('AddKeyChange', AddKeyChange);
 
 class KeyChange extends Change {
-  constructor(track, index, value) {
+  constructor(track, index, value, time) {
     super();
-    this.track = track;
-    this.index = index;
-    this.prevValue = this.track.getKeyValue(this.index);
-    this.newValue = value;
-    this.track.setKeyValue(this.index, value);
+    if (track != undefined && index != undefined && value != undefined) {
+      this.track = track;
+      this.index = index;
+      this.prevValue = this.track.getKeyValue(this.index);
+      this.newValue = value;
+      if (time != undefined) {
+        this.newTime = time;
+        this.track.setKeyTimeAndValue(this.index, this.newTime, this.newValue);
+      } else {
+        this.newTime = this.track.getKeyTime(this.index);
+        this.track.setKeyValue(this.index, this.newValue);
+      }
+    } else {
+      super();
+    }
   }
 
-  update(value) {
+  update(value, time) {
     this.newValue = value;
-    this.track.setKeyValue(this.index, this.newValue);
+    if (time != undefined) {
+      this.newTime = time;
+      this.track.setKeyTimeAndValue(this.index, this.newTime, this.newValue);
+    } else {
+      this.track.setKeyValue(this.index, this.newValue);
+    }
+    this.emit('updated', {
+      newValue: this.newValue.toJSON ? this.newValue.toJSON() : this.newValue,
+      newTime: this.newTime
+    });
   }
 
   undo() {
@@ -1607,6 +1710,39 @@ class KeyChange extends Change {
 
   redo() {
     this.track.setKeyValue(this.index, this.newValue);
+  }
+
+  toJSON(context) {
+    const j = {
+      name: this.name,
+      trackPath: this.track.getPath(),
+      newTime: this.newTime,
+      newValue: this.newValue
+    };
+    return j
+  }
+
+  fromJSON(j, context) {
+    const track = context.appData.scene.getRoot().resolvePath(j.trackPath, 1);
+    if (!track || !(track instanceof BaseTrack)) {
+      console.warn('resolvePath is unable to resolve', j.trackPath);
+      return
+    }
+    this.name = `Add Key to ${track.getName()}`;
+    this.track = track;
+    const key = this.track.loadKeyJSON(j);
+    this.index = key.index;
+    this.newTime = key.time;
+    this.newValue = key.newValue;
+    this.track.setKeyTimeAndValue(this.index, this.newTime, this.newValue);
+  }
+
+  changeFromJSON(j) {
+    if (!this.track) return
+    const key = this.track.loadKeyJSON(j);
+    this.newTime = key.time;
+    this.newValue = key.newValue;
+    this.track.setKeyTimeAndValue(this.index, this.newTime, this.newValue);
   }
 }
 
@@ -1628,12 +1764,19 @@ class TrackSampler extends Operator {
     this.track.on('keyRemoved', this.setDirty.bind(this));
     this.track.on('keyChanged', this.setDirty.bind(this));
 
+    if (!this.track.getOwner()) this.track.setOwner(this);
+
     this.addInput(new OperatorInput('Time'));
     this.addOutput(new OperatorOutput('Output', OperatorOutputMode.OP_WRITE));
 
+    this.__initialValue = null;
     this.__currChange = null;
     this.__secondaryChange = null;
     this.__secondaryChangeTime = -1;
+
+    this.getOutput('Output').on('paramSet', () => {
+      this.__initialValue = this.getOutput('Output').getValue();
+    });
   }
 
   /**
@@ -1658,10 +1801,10 @@ class TrackSampler extends Operator {
           (keyAndLerp.keyIndex == this.track.getNumKeys() - 1 && this.track.getKeyTime(keyAndLerp.keyIndex) != time)
         ) {
           this.__secondaryChange = new AddKeyChange(this.track, time, value);
-          this.__currChange.secondaryChanges.push(this.__secondaryChange);
+          this.__currChange.addSecondaryChange(this.__secondaryChange);
         } else {
           this.__secondaryChange = new KeyChange(this.track, keyAndLerp.keyIndex, value);
-          this.__currChange.secondaryChanges.push(this.__secondaryChange);
+          this.__currChange.addSecondaryChange(this.__secondaryChange);
         }
       } else {
         this.__secondaryChange.update(value);
@@ -1677,7 +1820,10 @@ class TrackSampler extends Operator {
   evaluate() {
     const output = this.getOutputByIndex(0);
     if (this.track.getNumKeys() == 0) {
-      output.setClean(output.getValue());
+      if (output.isConnected()) {
+        // output.setClean(this.__initialValue)
+        output.setClean(this.getOutput('Output').getValue());
+      }
     } else {
       const time = this.getInput('Time').getValue();
 
@@ -1714,6 +1860,12 @@ class KeyDisplayOperator extends Operator {
       }
     });
     this.track.on('keyRemoved', event => {
+      const { index } = event;
+      if (this.keyIndex >= index) {
+        this.setDirty();
+      }
+    });
+    this.track.on('keyAdded', event => {
       const { index } = event;
       if (this.keyIndex >= index) {
         this.setDirty();

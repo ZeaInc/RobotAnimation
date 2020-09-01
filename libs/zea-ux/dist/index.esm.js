@@ -367,7 +367,7 @@ class Change extends EventEmitter {
    */
   constructor(name) {
     super();
-    this.name = name ? name : UndoRedoManager.getChangeClassName(this);
+    this.name = name;
   }
 
   /**
@@ -571,7 +571,7 @@ class UndoRedoManager extends EventEmitter {
   // User Synchronization
 
   /**
-   * Basically returns a new instance of the derived `Change` class. This is why we need the `name` attribute.
+   * Returns a new instance of the derived `Change` class.
    *
    * @param {string} className - The className param.
    * @return {Change} - The return value.
@@ -664,13 +664,36 @@ class ParameterValueChange$1 extends Change {
     this.secondaryChanges = [];
   }
 
+  addSecondaryChange(secondaryChange) {
+    const index = this.secondaryChanges.length;
+    secondaryChange.on('updated', (updateData) => {
+      this.emit('updated', {
+        secondaryChange: {
+          index,
+          updateData,
+        },
+      });
+    });
+    this.secondaryChanges.push(secondaryChange);
+    this.emit('updated', {
+      secondaryChangeAdded: {
+        changeClass: UndoRedoManager.getChangeClassName(secondaryChange),
+        changeData: secondaryChange.toJSON(),
+      },
+      suppressPrimaryChange: this.suppressPrimaryChange,
+    });
+    return index
+  }
+
   /**
    * Rollbacks the value of the parameter to the previous one, passing it to the redo stack in case you wanna recover it later on.
    */
   undo() {
     if (!this.__param) return
 
-    if (!this.suppressPrimaryChange) this.__param.setValue(this.__prevValue);
+    if (!this.suppressPrimaryChange) {
+      this.__param.setValue(this.__prevValue);
+    }
 
     this.secondaryChanges.forEach((change) => change.undo());
   }
@@ -681,7 +704,10 @@ class ParameterValueChange$1 extends Change {
    */
   redo() {
     if (!this.__param) return
-    if (!this.suppressPrimaryChange) this.__param.setValue(this.__nextValue);
+    if (!this.suppressPrimaryChange) {
+      console.log('redo:', this.__param.getPath(), this.__nextValue.tr.toString());
+      this.__param.setValue(this.__nextValue);
+    }
 
     this.secondaryChanges.forEach((change) => change.redo());
   }
@@ -693,9 +719,13 @@ class ParameterValueChange$1 extends Change {
    */
   update(updateData) {
     if (!this.__param) return
-    this.__nextValue = updateData.value;
-    this.__param.setValue(this.__nextValue);
-    this.emit('updated', updateData);
+    if (updateData.value != undefined) {
+      this.__nextValue = updateData.value;
+      this.__param.setValue(this.__nextValue);
+    }
+    this.emit('updated', {
+      value: this.__nextValue,
+    });
   }
 
   /**
@@ -710,13 +740,23 @@ class ParameterValueChange$1 extends Change {
       paramPath: this.__param.getPath(),
     };
 
-    if (this.__nextValue != undefined) {
-      if (this.__nextValue.toJSON) {
-        j.value = this.__nextValue.toJSON();
-      } else {
-        j.value = this.__nextValue;
+    if (!this.suppressPrimaryChange) {
+      if (this.__nextValue != undefined) {
+        if (this.__nextValue.toJSON) {
+          j.value = this.__nextValue.toJSON();
+        } else {
+          j.value = this.__nextValue;
+        }
       }
     }
+
+    j.suppressPrimaryChange = this.suppressPrimaryChange;
+    j.secondaryChanges = this.secondaryChanges.map((secondaryChange) => {
+      return {
+        changeClass: UndoRedoManager.getChangeClassName(change),
+        changeData: secondaryChange.toJSON(context),
+      }
+    });
     return j
   }
 
@@ -733,12 +773,25 @@ class ParameterValueChange$1 extends Change {
       return
     }
     this.__param = param;
-    this.__prevValue = this.__param.getValue();
-    if (this.__prevValue.clone) this.__nextValue = this.__prevValue.clone();
-    else this.__nextValue = this.__prevValue;
-
     this.name = j.name;
-    if (j.value != undefined) this.changeFromJSON(j);
+
+    if (!j.suppressPrimaryChange) {
+      this.__prevValue = this.__param.getValue();
+      if (this.__prevValue.clone) this.__nextValue = this.__prevValue.clone();
+      else this.__nextValue = this.__prevValue;
+      if (j.value) {
+        if (this.__nextValue.fromJSON) this.__nextValue.fromJSON(j.value);
+        else this.__nextValue = j.value;
+        this.__param.setValue(this.__nextValue);
+      }
+    }
+
+    if (j.secondaryChanges) {
+      this.secondaryChange = j.secondaryChanges.map((data) => {
+        const change = UndoRedoManager.getInstance().constructChange(data.changeClass);
+        change.fromJSON(data.changeData, context);
+      });
+    }
   }
 
   /**
@@ -748,9 +801,23 @@ class ParameterValueChange$1 extends Change {
    */
   changeFromJSON(j) {
     if (!this.__param) return
-    if (this.__nextValue.fromJSON) this.__nextValue.fromJSON(j.value);
-    else this.__nextValue = j.value;
-    this.__param.setValue(this.__nextValue);
+    if (j.value) {
+      if (this.__nextValue.fromJSON) this.__nextValue.fromJSON(j.value);
+      else this.__nextValue = j.value;
+      this.__param.setValue(this.__nextValue);
+    }
+
+    if (j.secondaryChangeAdded) {
+      const data = j.secondaryChangeAdded;
+      const change = UndoRedoManager.getInstance().constructChange(data.changeClass);
+      change.fromJSON(data.changeData, context);
+      this.secondaryChanges.push(change);
+      if (j.suppressPrimaryChange) this.suppressPrimaryChange = j.suppressPrimaryChange;
+    }
+    if (j.secondaryChange) {
+      const secondaryChange = updateData.secondaryChange;
+      this.secondaryChanges[secondaryChange.index].update(secondaryChange.updateData);
+    }
   }
 }
 
@@ -2041,6 +2108,9 @@ class SelectionGroupXfoOperator extends Operator {
     super();
     this.addInput(new OperatorInput('InitialXfoMode')).setParam(initialXfoModeParam);
     this.addOutput(new OperatorOutput('GroupGlobalXfo')).setParam(globalXfoParam);
+
+    this.currChange = null;
+    this.initialItemXfos = [];
   }
 
   /**
@@ -2081,13 +2151,37 @@ class SelectionGroupXfoOperator extends Operator {
   backPropagateValue(xfo) {
     const groupTransformOutput = this.getOutput('GroupGlobalXfo');
     const currGroupXfo = groupTransformOutput.getValue();
-    const invXfo = currGroupXfo.inverse();
+
+    const currChange = UndoRedoManager.getInstance().getCurrentChange();
+    if (this.currChange != currChange) {
+      this.currChange = currChange;
+      if (this.currChange) this.currChange.suppressPrimaryChange = true;
+
+      for (let i = 1; i < this.getNumInputs(); i++) {
+        this.initialItemXfos[i] = this.getInputByIndex(i).getValue();
+
+        if (this.currChange) {
+          const param = this.getInputByIndex(i).getParam();
+          const secondaryChange = new ParameterValueChange$1(param);
+          this.currChange.addSecondaryChange(secondaryChange);
+        }
+      }
+      this.initialGroupXfo = currGroupXfo;
+    }
+
+    const invXfo = this.initialGroupXfo.inverse();
     const delta = xfo.multiply(invXfo);
     for (let i = 1; i < this.getNumInputs(); i++) {
-      const input = this.getInputByIndex(i);
-      const currXfo = input.getValue();
-      const result = delta.multiply(currXfo);
-      input.setValue(result);
+      const value = delta.multiply(this.initialItemXfos[i]);
+
+      if (this.currChange) {
+        this.currChange.secondaryChanges[i - 1].update({
+          value,
+        });
+      } else {
+        const input = this.getInputByIndex(i);
+        input.setValue(value);
+      }
     }
   }
 
