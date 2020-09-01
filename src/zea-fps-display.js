@@ -24,11 +24,15 @@ export class FPSDisplay extends HTMLElement {
 
   set renderer(renderer) {
     let frameCounter = 0
+    let fps = 0
     renderer.on('redrawOccured', () => {
       frameCounter++
     })
     setInterval(() => {
-      this.div.textContent = `Fps: ${frameCounter * 2}`
+      if (fps != frameCounter * 2) {
+        fps = frameCounter * 2
+        this.div.textContent = `Fps: ${fps}`
+      }
       frameCounter = 0
     }, 500)
   }

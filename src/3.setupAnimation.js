@@ -14,7 +14,9 @@ import {
   TrackSampler,
   XfoTrackDisplay,
   AttachmentConstraint,
+  RemoveKeyChange,
 } from '../libs/zea-kinematics/dist/index.rawimport.js'
+import { UndoRedoManager } from '../libs/zea-ux/dist/index.rawimport.js'
 
 const setupAnimation = (treeItem) => {
   const timeParam = new NumberParameter('time', 0)

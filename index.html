@@ -2,72 +2,110 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="shortcut icon" href="img/favicon-32x32.png" type="image/x-icon">
+    <link rel="shortcut icon" href="img/favicon-32x32.png" type="image/x-icon" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Zea - Robot Animation</title>
-    <link rel="stylesheet" type="text/css" href="./src/App.css">
-    <script type="module" src="./libs/zea-web-components/dist/zeainc-zea-web-components/zeainc-zea-web-components.esm.js"></script>
-    <link rel="stylesheet" href="./libs/zea-web-components/dist/zeainc-zea-web-components/zeainc-zea-web-components.css"></link>
+    <script
+      type="module"
+      src="./libs/zea-web-components/dist/zeainc-zea-web-components/zeainc-zea-web-components.esm.js"
+    ></script>
+    <!-- <link rel="stylesheet" href="./libs/zea-web-components/dist/zeainc-zea-web-components/zeainc-zea-web-components.css"></link> -->
+    <link rel="stylesheet" type="text/css" href="./src/App.css" />
+    <script src="https://unpkg.com/debug@4.1.1/dist/debug.js"></script>
+    <script src="https://www.unpkg.com/socket.io-client@2.3.0/dist/socket.io.js"></script>
   </head>
   <body>
     <div class="App">
-    <zea-layout
-      orientation="vertical"
-      cell-a-size="45"
-      resize-cell-a="false"
-      cell-b-size="100%"
-      cell-c-size="30px"
-      resize-cell-c="false"
-    >
-      <div slot="a" class="App-header">
-        <img class="App-logo" src="img/logo-zea.svg" height="30px"/>
-        <div class="UserChipSetHolder">
-          <zea-user-chip-set id="zea-user-chip-set"></zea-user-chip-set>
+      <zea-layout
+        orientation="vertical"
+        cell-a-size="45"
+        resize-cell-a="false"
+        cell-b-size="100%"
+        cell-c-size="30px"
+        resize-cell-c="false"
+      >
+        <div slot="a" class="App-header">
+          <img class="App-logo" src="img/logo-zea.svg" height="30px" />
+          <div class="MenuHolder">
+            <zea-menu type="dropdown" show-anchor="true">
+              <zea-menu-item>
+                View
+                <zea-menu-subitems>
+                  <zea-menu-item class="MenuItem" hotkey="f" id="foo" callback="frameSelection()">Frame Selection</zea-menu-item>
+                </zea-menu-subitems>
+              </zea-menu-item>
+              <zea-menu-item>
+                Edit
+                <zea-menu-subitems>
+                  <zea-menu-item class="MenuItem" hotkey="ctrl+z" callback="undoChange()">Undo</zea-menu-item>
+                  <zea-menu-item class="MenuItem" hotkey="ctrl+y" callback="redoChange()">Redo</zea-menu-item>
+                  <zea-menu-item class="MenuItem">
+                    Transform Mode
+                    <zea-menu-subitems radio-select="true">
+                      <zea-menu-item class="MenuItem" id="select-move-mode" hotkey="w" callback="setMoveMode()">Move</zea-menu-item>
+                      <zea-menu-item class="MenuItem" id="select-rotate-mode" hotkey="e" callback="setRotateMode()">Rotate</zea-menu-item>
+                    </zea-menu-subitems>
+                  </zea-menu-item>
+                  <zea-menu-item class="MenuItem">
+                    Transform Coordinates
+                    <zea-menu-subitems radio-select="true">
+                      <zea-menu-item class="MenuItem" hotkey="l" checked="true" callback="setLocalTransformMode()">
+                        Local
+                      </zea-menu-item>
+                      <zea-menu-item class="MenuItem" hotkey="g" callback="setGlobalTransformMode()">Global</zea-menu-item>
+                    </zea-menu-subitems>
+                  </zea-menu-item>
+                </zea-menu-subitems>
+              </zea-menu-item>
+              <zea-menu-item>
+                Tools
+                <zea-menu-subitems>
+                  <zea-menu-item class="MenuItem" has-checkbox="true" hotkey="s" callback="setToolModeToSelect()">Select Items</zea-menu-item>
+                </zea-menu-subitems>
+              </zea-menu-item>
+              <zea-menu-item>
+                VR
+                <zea-menu-subitems>
+                  <zea-menu-item class="MenuItem" callback="launchVR()">
+                    <img src="img/VR_Filled-512.png" height="20"></img>Launch VR 
+                  </zea-menu-item>
+                  <zea-menu-item class="MenuItem">
+                    Select Headset
+                    <zea-menu-subitems radio-select="true">
+                      <zea-menu-item class="MenuItem" checked="true" id="select-vive-headset">HTC Vive</zea-menu-item>
+                      <zea-menu-item class="MenuItem" id="select-oculus-headset">Oculus Rift</zea-menu-item>
+                    </zea-menu-subitems>
+                  </zea-menu-item>
+                </zea-menu-subitems>
+              </zea-menu-item>
+            </zea-menu>
+          </div>
+
+          <div class="UserChipSetHolder">
+            <zea-user-chip-set id="zea-user-chip-set"></zea-user-chip-set>
+          </div>
+
+          <zea-user-chip id="zea-user-chip"></zea-user-chip>
         </div>
-        <div class="MenuHolder">
-          <zea-menu type="dropdown" show-anchor="true">
-            <zea-menu-item>
-              Edit
-              <zea-menu-subitems>
-                <zea-menu-item class="MenuItem" id="RealisticRendering">
-                  Undo
-                </zea-menu-item>
-                <zea-menu-item class="MenuItem" id="IllustrationRendering">
-                  Redo
-                </zea-menu-item>
-              </zea-menu-subitems>
-            </zea-menu-item>
-            <zea-menu-item>
-              VR
-              <zea-menu-subitems>
-                <zea-menu-item class="MenuItem">
-                  <zea-icon></zea-icon>Launch VR
-                </zea-menu-item>
-              </zea-menu-subitems>
-            </zea-menu-item>
-          </zea-menu>
+        <zea-layout slot="b" cell-a-size="200" cell-b-size="100%" cell-c-size="5px" resize-cell-c="false">
+          <zea-scroll-pane slot="a">
+            <zea-tree-view id="zea-tree-view"></zea-tree-view>
+          </zea-scroll-pane>
+          <div slot="b" id="viewport"></div>
+          <zea-scroll-pane slot="c"></zea-scroll-pane>
+        </zea-layout>
+        <div id="timecontrols" slot="c">
+          <div id="timeline">
+            <div id="timebar"></div>
+          </div>
+          <div id="prevkey"><</div>
+          <div id="nextkey">></div>
         </div>
-        <zea-user-chip id="zea-user-chip"></zea-user-chip> 
-      </div>
-      <zea-layout slot="b" cell-a-size="200" cell-b-size="100%" cell-c-size="5px" resize-cell-c="false">
-        <zea-scroll-pane slot="a">
-          <zea-tree-view id="zea-tree-view"></zea-tree-view>
-        </zea-scroll-pane>
-        <div slot="b" id="viewport"></div>
-        <zea-scroll-pane slot="c"></zea-scroll-pane>
       </zea-layout>
-      <div id="timecontrols" slot="c">
-        <div id="timeline">
-          <div id="timebar"></div>
-        </div>
-        <div id="prevkey"><</div>
-        <div id="nextkey">></div>
-      </div>
-    </zea-layout>
-  </div>
+    </div>
   </body>
   <script type="module" src="./src/index.js"></script>
   <!-- Start of HubSpot Embed Code -->
-  <!-- <script type="text/javascript" id="hs-script-loader" async defer src="//js.hs-scripts.com/7161066.js"></script> -->
+  <script type="text/javascript" id="hs-script-loader" async defer src="//js.hs-scripts.com/7161066.js"></script>
   <!-- End of HubSpot Embed Code -->
 </html>

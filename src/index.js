@@ -1,4 +1,4 @@
-import { Vec3, Color, Group, EnvMap, Scene, GLRenderer } from '../libs/zea-engine/dist/index.esm.js'
+import { MathFunctions, Vec3, Color, Group, EnvMap, Scene, GLRenderer } from '../libs/zea-engine/dist/index.esm.js'
 
 const domElement = document.getElementById('viewport')
 
@@ -106,64 +106,50 @@ appData.selectionManager.selectionGroup.getParameter('SubtreeHighlightColor').se
 let selectItemsActivatedTime
 let selectItemsActivated = false
 let currKey
-document.addEventListener('keydown', (event) => {
-  if (event.key.toLowerCase() == currKey) return
-  switch (event.key.toLowerCase()) {
-    case 'f':
-      renderer.frameAll()
-      break
-    case 's':
-      if (!event.ctrlKey) {
-        if (selectItemsActivated) {
-          appData.toolManager.popTool()
-          selectItemsActivated = false
-        } else {
-          appData.toolManager.pushTool(selectionTool)
-          selectItemsActivated = true
-          selectItemsActivatedTime = performance.now()
-        }
-      }
-      break
-    case 'w':
-      appData.selectionManager.showHandles('Translate')
-      break
-    case 'e':
-      appData.selectionManager.showHandles('Rotate')
-      break
-    case 'z':
-      if (event.ctrlKey) appData.undoRedoManager.undo()
-      break
-    case 'y':
-      if (event.ctrlKey) appData.undoRedoManager.undo()
-      break
-    case 'g':
-      appData.selectionManager.setXfoMode(Group.INITIAL_XFO_MODES.globalOri)
-      break
-    case 'l':
-      appData.selectionManager.setXfoMode(Group.INITIAL_XFO_MODES.average)
-      break
-  }
-  currKey = event.key.toLowerCase()
-})
 
-document.addEventListener('keyup', (event) => {
-  switch (event.key.toLowerCase()) {
-    case 'f': {
-      renderer.frameAll()
-      break
-    }
-    case 's': {
-      if (selectItemsActivated) {
-        const t = performance.now() - selectItemsActivatedTime
-        if (t > 400) {
-          appData.toolManager.popTool()
-          selectItemsActivated = false
-        }
-      }
-    }
+window.frameSelection = () => {
+  renderer.frameAll()
+}
+window.undoChange = () => {
+  appData.undoRedoManager.undo()
+}
+window.redoChange = () => {
+  appData.undoRedoManager.redo()
+}
+window.setMoveMode = () => {
+  if (selectItemsActivated) setToolModeToTransform()
+  appData.selectionManager.showHandles('Translate')
+  // document.getElementById('select-move-mode').setAttribute('checked', 'true')
+  // document.getElementById('select-rotate-mode').setAttribute('checked', 'false')
+}
+window.setRotateMode = () => {
+  if (selectItemsActivated) setToolModeToTransform()
+  appData.selectionManager.showHandles('Rotate')
+  // document.getElementById('select-move-mode').setAttribute('checked', 'false')
+  // document.getElementById('select-rotate-mode').setAttribute('checked', 'true')
+}
+window.setGlobalTransformMode = () => {
+  appData.selectionManager.setXfoMode(Group.INITIAL_XFO_MODES.globalOri)
+}
+window.setLocalTransformMode = () => {
+  appData.selectionManager.setXfoMode(Group.INITIAL_XFO_MODES.average)
+}
+window.setToolModeToTransform = () => {
+  if (selectItemsActivated) {
+    appData.toolManager.popTool()
+    selectItemsActivated = false
   }
-  if (event.key.toLowerCase() == currKey) currKey = undefined
-})
+}
+window.setToolModeToSelect = () => {
+  if (selectItemsActivated) {
+    setToolModeToTransform()
+  } else {
+    appData.toolManager.pushTool(selectionTool)
+    selectItemsActivated = true
+    selectItemsActivatedTime = performance.now()
+  }
+}
+window.launchVR = () => {}
 
 ////////////////////////////////////
 // Setup UI Web Components
@@ -174,56 +160,40 @@ sceneTreeView.rootItem = scene.getRoot()
 
 ////////////////////////////////////
 // Setup Collaboration
-// import { Session, SessionSync } from "../libs/zea-collab/dist/index.rawimport.js"
+/*
+import { Session, SessionSync } from '../libs/zea-collab/dist/index.rawimport.js'
 
-// const urlParams = new URLSearchParams(window.location.search);
-// let userId = urlParams.get('user-id');
-// if (!userId) {
-//   userId = localStorage.getItem('userId');
-//   if(!userId) {
-//     userId = Math.random().toString(36).slice(2, 12);
-//     localStorage.setItem('userId', userId);
-//   }
-// } else {
-//   localStorage.setItem('userId', userId);
-// }
+const firstNames = ['Phil', 'Froilan', 'Alvaro', 'Dan', 'Mike', 'Rob', 'Steve']
+const lastNames = ['Taylor', 'Smith', 'Haines', 'Moore', 'Elías Pájaro Torreglosa', 'Moreno']
+const userData = {
+  given_name: firstNames[MathFunctions.randomInt(0, firstNames.length)],
+  family_name: lastNames[MathFunctions.randomInt(0, lastNames.length)],
+  id: Math.random().toString(36).slice(2, 12),
+  color: Color.random().toHex(),
+}
 
-// const color = Color.random();
-// const firstNames = ["Phil", "Froilan", "Alvaro", "Dan", "Mike", "Rob", "Steve"]
-// const lastNames = ["Taylor", "Smith", "Haines", "Moore", "Elías Pájaro Torreglosa", "Moreno"]
-// const userData = {
-//   given_name: firstNames[Math.randomInt(0, firstNames.length)],
-//   family_name: lastNames[Math.randomInt(0, lastNames.length)],
-//   id: userId,
-//   color: color.toHex()
-// }
+const socketUrl = 'https://websocket-staging.zea.live'
+const session = new Session(userData, socketUrl)
+let roomId = urlParams.get('room-id')
+session.joinRoom(document.location.href + roomId)
 
-// const socketUrl = 'https://websocket-staging.zea.live';
-// const session = new Session(userData, socketUrl);
-// let roomId = urlParams.get('room-id');
-// session.joinRoom(document.location.href+roomId);
+const sessionSync = new SessionSync(session, appData, userData, {})
 
-// const sessionSync = new SessionSync(session, appData, userData, {});
+const userChipSet = document.getElementById('zea-user-chip-set')
+userChipSet.session = session
+userChipSet.showImages = true //boolean('Show Images', true)
 
-// const userChipSet = document.getElementById(
-//   "zea-user-chip-set"
-// );
-// userChipSet.session = session
-// userChipSet.showImages = true;//boolean('Show Images', true)
+document.addEventListener(
+  'zeaUserClicked',
+  () => {
+    console.log('user clicked')
+  },
+  false
+)
 
-// document.addEventListener(
-//   'zeaUserClicked',
-//   () => {
-//     console.log('user clicked')
-//   },
-//   false
-// )
-
-// const userChip = document.getElementById(
-//   "zea-user-chip"
-// );
-// userChip.userData = userData
-
+const userChip = document.getElementById('zea-user-chip')
+userChip.userData = userData
+*/
 ////////////////////////////////////
 // Display the Fps
 import './zea-fps-display.js'

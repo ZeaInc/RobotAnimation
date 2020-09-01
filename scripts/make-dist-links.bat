@@ -13,6 +13,9 @@ mklink /J "../libs/zea-kinematics/dist" "../node_modules/@zeainc/zea-kinematics/
 mkdir "../libs/zea-ux"
 mklink /J "../libs/zea-ux/dist" "../node_modules/@zeainc/zea-ux/dist"
 
+mkdir "../libs/zea-collab"
+mklink /J "../libs/zea-collab/dist" "../node_modules/@zeainc/zea-collab/dist"
+
 mkdir "../libs/zea-pointclouds"
 mklink /J "../libs/zea-pointclouds/dist" "../node_modules/@zeainc/zea-pointclouds/dist"
 

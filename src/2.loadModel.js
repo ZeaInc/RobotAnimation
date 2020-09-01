@@ -28,7 +28,7 @@ const loadModel = (appData) => {
   // ///////////////////////////////////////
   // Setup the Solver
   const ikSolver = new IKSolver('ikSolver')
-  ikSolver.getParameter('Iterations').setValue(40)
+  ikSolver.getParameter('Iterations').setValue(20)
   treeItem.addChild(ikSolver)
   treeItem.addChild(ikSolver.debugTree)
 
