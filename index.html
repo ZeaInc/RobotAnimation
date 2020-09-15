@@ -5,14 +5,7 @@
     <link rel="shortcut icon" href="img/favicon-32x32.png" type="image/x-icon" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Zea - Robot Animation</title>
-    <script
-      type="module"
-      src="./libs/zea-web-components/dist/zeainc-zea-web-components/zeainc-zea-web-components.esm.js"
-    ></script>
-    <!-- <link rel="stylesheet" href="./libs/zea-web-components/dist/zeainc-zea-web-components/zeainc-zea-web-components.css"></link> -->
-    <link rel="stylesheet" type="text/css" href="./src/App.css" />
-    <script src="https://unpkg.com/debug@4.1.1/dist/debug.js"></script>
-    <script src="https://www.unpkg.com/socket.io-client@2.3.0/dist/socket.io.js"></script>
+    <link rel="stylesheet" type="text/css" href="./css/styles.css" />
   </head>
   <body>
     <div class="App">
@@ -104,8 +97,18 @@
       </zea-layout>
     </div>
   </body>
-  <script type="module" src="./src/index.js"></script>
+
+  <script defer crossorigin src="https://cdn.jsdelivr.net/npm/@zeainc/zea-engine@2.0.0"></script>
+  <script defer crossorigin src="https://cdn.jsdelivr.net/npm/@zeainc/zea-ux@2.0.0"></script>
+  <script defer crossorigin src="https://cdn.jsdelivr.net/npm/@zeainc/zea-kinematics@2.0.0"></script>
+  <script defer crossorigin src="https://cdn.jsdelivr.net/npm/@zeainc/zea-cad@2.0.0"></script>
+  <script defer crossorigin src="https://cdn.jsdelivr.net/npm/@zeainc/zea-pointclouds@2.0.0"></script>
+  <script crossorigin type="module" src="https://cdn.jsdelivr.net/npm/@zeainc/zea-web-components@rc/dist/zea-web-components/zea-web-components.esm.js"></script>
+  <script defer type="module" src="./js/index.js"></script>
+  <!--script defer src="https://unpkg.com/debug@4.1.1/dist/debug.js"></script>
+  <script defer src="https://www.unpkg.com/socket.io-client@2.3.0/dist/socket.io.js"></script-->
+  <!--script type="module" src="./src/index.js"></script-->
   <!-- Start of HubSpot Embed Code -->
-  <script type="text/javascript" id="hs-script-loader" async defer src="//js.hs-scripts.com/7161066.js"></script>
+  <!--script type="text/javascript" id="hs-script-loader" async defer src="//js.hs-scripts.com/7161066.js"></script-->
   <!-- End of HubSpot Embed Code -->
 </html>
