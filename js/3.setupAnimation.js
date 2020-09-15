@@ -1,6 +1,6 @@
-const  { Vec3, Xfo, Color, NumberParameter, Material, Cuboid, GeomItem, MathFunctions } = globalThis.zeaEngine
-const  { XfoTrack, TrackSampler, XfoTrackDisplay, AttachmentConstraint, RemoveKeyChange } = globalThis.zeaKinematics
-const  { UndoRedoManager } = globalThis.zeaUx
+const { Vec3, Xfo, Color, NumberParameter, Material, Cuboid, GeomItem, MathFunctions } = globalThis.zeaEngine
+const { XfoTrack, TrackSampler, XfoTrackDisplay, AttachmentConstraint, RemoveKeyChange } = globalThis.zeaKinematics
+const { UndoRedoManager } = globalThis.zeaUx
 
 const setupAnimation = (treeItem) => {
   const timeParam = new NumberParameter('time', 0)

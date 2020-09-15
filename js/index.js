@@ -1,4 +1,4 @@
-const { Vec3, Color, Group, EnvMap, Scene, GLRenderer } = globalThis.zeaEngine
+const { SystemDesc, Vec3, Color, Group, EnvMap, Scene, GLRenderer } = globalThis.zeaEngine
 
 const domElement = document.getElementById('viewport')
 
@@ -23,9 +23,13 @@ renderer
   .getCamera()
   .setPositionAndTarget(new Vec3({ x: 5.0, y: 5.0, z: 2.0 }), new Vec3({ x: 0.0, y: 0.0, z: 1 }))
 
-const envMap = new EnvMap('envMap')
-envMap.getParameter('FilePath').setUrl('./data/HDR_029_Sky_Cloudy_Ref.vlenv')
-scene.setEnvMap(envMap)
+scene.getSettings().getParameter('BackgroundColor').setValue(new Color('#e5e5e5'))
+
+if (!SystemDesc.isMobileDevice) {
+  const envMap = new EnvMap('envMap')
+  envMap.getParameter('FilePath').setUrl('./data/HDR_029_Sky_Cloudy_Ref.vlenv')
+  scene.setEnvMap(envMap)
+}
 
 const urlParams = new URLSearchParams(window.location.search)
 
@@ -38,7 +42,7 @@ scene.getRoot().addChild(treeItem)
 ////////////////////////////////////
 // Point Cloud renderer
 import loadPointCloud from './1.loadPointCloud.js'
-if (!urlParams.has('nopoints')) {
+if (!urlParams.has('nopoints') && !SystemDesc.isMobileDevice) {
   const pointCloud = loadPointCloud(appData)
   scene.getRoot().addChild(pointCloud)
 }

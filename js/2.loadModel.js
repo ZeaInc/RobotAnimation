@@ -12,7 +12,24 @@ const loadModel = (appData) => {
   // ///////////////////////////////////////
   // Load the Robot Model
   const asset = new CADAsset('MC700_ASSY')
-  asset.getParameter('DataFilePath').setUrl('data/MC700_ASSY.zcad')
+  // asset.getParameter('DataFilePath').setUrl('data/MC700_ASSY.zcad')
+  asset.getParameter('DataFilePath').setUrl('data/MC700_ASSY-visu.zcad')
+
+  asset.getMaterialLibrary().on('loaded', () => {
+    asset
+      .getMaterialLibrary()
+      .getMaterials()
+      .forEach((material) => {
+        material.setShaderName('StandardSurfaceShader')
+
+        material.getParameter('Metallic').setValue(0.4)
+        material.getParameter('Roughness').setValue(0.86)
+        material.getParameter('Reflectance').setValue(0.3)
+      })
+
+    // const material = asset.getMaterialLibrary().getMaterial('Mesh')
+    // material.getParameter('BaseColor').setValue(new Color(1, 0, 0))
+  })
 
   treeItem.addChild(asset)
 
@@ -33,13 +50,13 @@ const loadModel = (appData) => {
   // ///////////////////////////////////////
   // Setup the joints
 
-  const jointMaterial = new Material('Joint0', 'SimpleSurfaceShader')
-  jointMaterial.getParameter('BaseColor').setValue(new Color(1, 0, 0))
+  // const jointMaterial = new Material('Joint0', 'StandardSurfaceShader')
+  // jointMaterial.getParameter('BaseColor').setValue(new Color(1, 0, 0))
 
   function addJoint(name, axis, limits) {
     // const joint = asset.getChildByName(name);
     const joint = new Group(name)
-    joint.getParameter('Material').setValue(jointMaterial)
+    // joint.getParameter('Material').setValue(jointMaterial)
     treeItem.addChild(joint)
     joint.addItem(asset.getChildByName(name))
     ikSolver.addJoint(joint.getParameter('GlobalXfo'), axis, limits)
@@ -67,11 +84,11 @@ const loadModel = (appData) => {
 
   asset.on('loaded', () => {
     addJoint('NAUO1', 2, [-140, 140])
-    addJoint('NAUO6', 1, [-60, 105])
-    addJoint('NAUO16', 1, [-60, 80])
-    addJoint('NAUO7', 0)
+    addJoint('NAUO6', 1, [-105, 60])
+    addJoint('NAUO16', 1, [-80, 60])
+    addJoint('NAUO7', 0, [-160, 160])
     addJoint('NAUO17', 1, [-90, 90])
-    addJoint('NAUO15', 0)
+    addJoint('NAUO15', 0, [-160, 160])
 
     // ///////////////////////////////////////
     // Setup the Target
