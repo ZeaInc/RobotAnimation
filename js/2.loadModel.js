@@ -20,15 +20,12 @@ const loadModel = (appData) => {
       .getMaterialLibrary()
       .getMaterials()
       .forEach((material) => {
-        material.setShaderName('StandardSurfaceShader')
-
-        material.getParameter('Metallic').setValue(0.4)
-        material.getParameter('Roughness').setValue(0.86)
-        material.getParameter('Reflectance').setValue(0.3)
+        if (material.getParameter('Metallic')) {
+          material.getParameter('Metallic').setValue(0.4)
+          material.getParameter('Roughness').setValue(0.86)
+          material.getParameter('Reflectance').setValue(0.3)
+        }
       })
-
-    // const material = asset.getMaterialLibrary().getMaterial('Mesh')
-    // material.getParameter('BaseColor').setValue(new Color(1, 0, 0))
   })
 
   treeItem.addChild(asset)
