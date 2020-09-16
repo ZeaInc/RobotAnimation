@@ -1,6 +1,6 @@
-const { Color, Group, Material, TreeItem, GeomItem, Cuboid, PassType } = globalThis.zeaEngine
-const { GLCADPass, CADAsset } = globalThis.zeaCad
-const { IKSolver, TriangleIKSolver, RamAndPistonOperator } = globalThis.zeaKinematics
+const { Color, Group, Material, TreeItem, GeomItem, Cuboid, PassType } = window.zeaEngine
+const { GLCADPass, CADAsset } = window.zeaCad
+const { IKSolver, TriangleIKSolver, RamAndPistonOperator } = window.zeaKinematics
 
 const loadModel = (appData) => {
   const cadPass = new GLCADPass(true)

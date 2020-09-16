@@ -1,4 +1,4 @@
-const { SystemDesc, Vec3, Color, Group, EnvMap, Scene, GLRenderer } = globalThis.zeaEngine
+const { SystemDesc, Vec3, Color, Group, EnvMap, Scene, GLRenderer } = window.zeaEngine
 
 const domElement = document.getElementById('viewport')
 
@@ -58,7 +58,7 @@ if (!urlParams.has('noanim')) {
 ////////////////////////////////////
 // Setup the Left side Tree view.
 
-const { SelectionManager, ToolManager, ViewTool, HandleTool, SelectionTool, UndoRedoManager } = globalThis.zeaUx
+const { SelectionManager, ToolManager, ViewTool, HandleTool, SelectionTool, UndoRedoManager } = window.zeaUx
 
 appData.selectionManager = new SelectionManager(appData, {
   enableXfoHandles: true,

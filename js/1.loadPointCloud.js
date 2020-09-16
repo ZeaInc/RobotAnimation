@@ -1,5 +1,5 @@
-const { Vec3, PassType } = globalThis.zeaEngine
-const { PointCloudAsset, GLPointCloudPass } = globalThis.zeaPointClouds
+const { Vec3, PassType } = window.zeaEngine
+const { PointCloudAsset, GLPointCloudPass } = window.zeaPointClouds
 
 const loadPointCloud = (appData) => {
   const pointCloudPass = new GLPointCloudPass()
