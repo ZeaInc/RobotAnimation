@@ -87,13 +87,7 @@
           <div slot="b" id="viewport"></div>
           <zea-scroll-pane slot="c"></zea-scroll-pane>
         </zea-layout>
-        <div id="timecontrols" slot="c">
-          <div id="timeline">
-            <div id="timebar"></div>
-          </div>
-          <div id="prevkey"><</div>
-          <div id="nextkey">></div>
-        </div>
+        <zea-timebar id="timecontrols" slot="c"></zea-timebar>
       </zea-layout>
     </div>
   </body>
@@ -119,6 +113,7 @@
   ></script>
   
 
+  <script defer type="module" src="./js/zea-timebar.js"></script>
   <script defer type="module" src="./js/index.js"></script>
   <!--script defer src="https://unpkg.com/debug@4.1.1/dist/debug.js"></script>
   <script defer src="https://www.unpkg.com/socket.io-client@2.3.0/dist/socket.io.js"></script-->

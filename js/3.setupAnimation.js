@@ -12,116 +12,21 @@ const setupAnimation = (treeItem) => {
   ///////////////////////////////////////////////////
   // Setup the time bar
 
-  const timeline = document.getElementById('timeline')
-  const timeBar = document.getElementById('timebar')
-  const prevKey = document.getElementById('prevkey')
-  const nextKey = document.getElementById('nextkey')
+  const timecontrols = document.getElementById('timecontrols')
+  timecontrols.timeParam = timeParam
+  timecontrols.track = xfoTrack
 
-  let playingId = false
-  const play = () => {
-    let time = Math.round(timeParam.getValue())
-    const range = timeParam.getRange()
-    if (!playingId) {
-      playingId = setInterval(() => {
-        time += 20
-        timeParam.setValue(Math.round(time))
-        if (time > range[1]) time = range[0]
-      }, 20)
-    }
-  }
-  const stop = () => {
-    clearInterval(playingId)
-    playingId = null
-  }
-  const setTime = (time) => {
-    timeParam.setValue(Math.round(time))
-  }
   const saveTrack = () => {
     const json = xfoTrack.toJSON()
-    console.log(JSON.stringify(json, undefined, ' '))
+    download('XfoTrack.json', JSON.stringify(json, undefined, ' '))
   }
-
   document.addEventListener('keydown', (event) => {
     const key = String.fromCharCode(event.keyCode).toLowerCase()
     switch (key) {
       case ' ':
-        if (playingId) stop()
-        else play()
-        break
       case 's':
         if (event.ctrlKey) saveTrack()
         break
-      case '': {
-        const time = Math.round(timeParam.getValue())
-        const keyAndLerp = xfoTrack.findKeyAndLerp(time)
-        if (keyAndLerp.lerp == 0.0) {
-          // xfoTrack.removeKey(keyAndLerp.keyIndex)
-          const removeKeyChange = new RemoveKeyChange(xfoTrack, keyAndLerp.keyIndex)
-          UndoRedoManager.getInstance().addChange(removeKeyChange)
-        }
-        break
-      }
-    }
-  })
-
-  timeline.addEventListener('mousedown', (event) => {
-    if (playingId) stop()
-    dragTimeBar(event)
-    document.addEventListener('mousemove', dragTimeBar)
-    document.addEventListener('mouseup', endDragTimeBar)
-    event.stopPropagation()
-    event.preventDefault()
-  })
-
-  const dragTimeBar = (event) => {
-    const range = timeParam.getRange()
-    const time = ((event.clientX - 5) / timeline.offsetWidth) * range[1]
-    setTime(time)
-    event.stopPropagation()
-    event.preventDefault()
-  }
-
-  const endDragTimeBar = (event) => {
-    document.removeEventListener('mousemove', dragTimeBar)
-    document.removeEventListener('mouseup', endDragTimeBar)
-  }
-
-  timeParam.on('valueChanged', () => {
-    const range = timeParam.getRange()
-    const time = MathFunctions.clamp(timeParam.getValue(), range[0], range[1])
-    timeBar.style.left = `${(time / range[1]) * timeline.offsetWidth - timeBar.offsetWidth * 0.5}px`
-  })
-
-  prevKey.addEventListener('mousedown', () => {
-    event.stopPropagation()
-    event.preventDefault()
-    if (playingId) stop()
-    const time = Math.round(timeParam.getValue())
-    const keyAndLerp = xfoTrack.findKeyAndLerp(time)
-    if (keyAndLerp.lerp > 0.0) {
-      const time = xfoTrack.getKeyTime(keyAndLerp.keyIndex)
-      timeParam.setValue(time)
-    } else if (keyAndLerp.keyIndex > 0) {
-      const time = xfoTrack.getKeyTime(keyAndLerp.keyIndex - 1)
-      timeParam.setValue(time)
-    } else {
-      const time = xfoTrack.getKeyTime(xfoTrack.getNumKeys() - 1)
-      timeParam.setValue(time)
-    }
-  })
-
-  nextKey.addEventListener('mousedown', () => {
-    event.stopPropagation()
-    event.preventDefault()
-    if (playingId) stop()
-    const time = Math.round(timeParam.getValue())
-    const keyAndLerp = xfoTrack.findKeyAndLerp(time)
-    if (keyAndLerp.keyIndex < xfoTrack.getNumKeys() - 1) {
-      const time = xfoTrack.getKeyTime(keyAndLerp.keyIndex + 1)
-      timeParam.setValue(time)
-    } else {
-      const time = xfoTrack.getKeyTime(0)
-      timeParam.setValue(time)
     }
   })
 
@@ -168,7 +73,7 @@ const setupAnimation = (treeItem) => {
         .then((response) => response.json())
         .then((json) => {
           xfoTrack.fromJSON(json)
-          play()
+          setTimeout(timecontrols.play, 1500)
         })
 
       /////////////////////////////////////////////////
