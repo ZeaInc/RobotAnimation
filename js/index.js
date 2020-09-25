@@ -1,4 +1,4 @@
-const { SystemDesc, Vec3, Color, Group, EnvMap, Scene, GLRenderer } = window.zeaEngine
+const { MathFunctions, SystemDesc, Vec3, Color, Group, EnvMap, Scene, GLRenderer } = window.zeaEngine
 
 const domElement = document.getElementById('viewport')
 
@@ -165,22 +165,23 @@ const sceneTreeView = document.getElementById('zea-tree-view')
 sceneTreeView.appData = appData
 sceneTreeView.rootItem = scene.getRoot()
 
-////////////////////////////////////
-// Setup Collaboration
-/*
-import { Session, SessionSync } from '../libs/zea-collab/dist/index.rawimport.js'
+// ////////////////////////////////////
+// // Setup Collaboration
+const { Session, SessionSync } = window.zeaCollab
 
+const color = Color.random()
 const firstNames = ['Phil', 'Froilan', 'Alvaro', 'Dan', 'Mike', 'Rob', 'Steve']
 const lastNames = ['Taylor', 'Smith', 'Haines', 'Moore', 'Elías Pájaro Torreglosa', 'Moreno']
 const userData = {
   given_name: firstNames[MathFunctions.randomInt(0, firstNames.length)],
   family_name: lastNames[MathFunctions.randomInt(0, lastNames.length)],
   id: Math.random().toString(36).slice(2, 12),
-  color: Color.random().toHex(),
+  color: color.toHex(),
 }
 
 const socketUrl = 'https://websocket-staging.zea.live'
 const session = new Session(userData, socketUrl)
+
 let roomId = urlParams.get('room-id')
 session.joinRoom(document.location.href + roomId)
 
@@ -200,7 +201,7 @@ document.addEventListener(
 
 const userChip = document.getElementById('zea-user-chip')
 userChip.userData = userData
-*/
+
 ////////////////////////////////////
 // Display the Fps
 import './zea-fps-display.js'
