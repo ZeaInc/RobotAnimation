@@ -18,5 +18,5 @@ https://docs.zea.live/RobotAnimation/
 ## Acknowledgements
 
 - Thank you to the team at [Potree](https://github.com/potree/potree/)
-- CAD Model by [Robert Greene(https://grabcad.com/robert.greene-6) last accessed from [GrabCAD(https://grabcad.com/library/nachi-robotics-mc700-6-axis-industrial-robot-1) on 2020-10-02
-- LiDAR scan data by [NavVis(https://www.navvis.com/) accessed from their site [here(https://www.navvis.com/m6-pointclouds)
+- CAD Model by [Robert Greene](https://grabcad.com/robert.greene-6) last accessed from [GrabCAD](https://grabcad.com/library/nachi-robotics-mc700-6-axis-industrial-robot-1) on 2020-10-02
+- LiDAR scan data by [NavVis](https://www.navvis.com/) accessed from their site [here](https://www.navvis.com/m6-pointclouds)
