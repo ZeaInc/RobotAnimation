@@ -1,5 +1,5 @@
 # Zea Robot Animation Showcase
-The robot animation showcase demonstrates the power of combining plugins with the Zea Engine. In this example, you can animate a CAD model, rendered inside a LIDAR point cloud environment, using inverse kinematics.
+The robot animation showcase demonstrates the power of combining plugins with the Zea Engine. In this example, you can animate a CAD model, rendered inside a LiDAR point cloud environment, using inverse kinematics.
 
 The Zea Point Clouds plugin is based on the impressive [Potree](https://github.com/potree/potree/) rendering solution that was originally implemented in ThreeJS.
 
