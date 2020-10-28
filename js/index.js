@@ -69,9 +69,6 @@ appData.selectionManager.on('selectionChanged', (event) => {
 })
 
 appData.undoRedoManager = UndoRedoManager.getInstance()
-appData.toolManager = new ToolManager(appData)
-
-renderer.setUndoRedoManager(appData.undoRedoManager)
 
 const target = treeItem.getChildByName('target')
 appData.selectionManager.setSelection(new Set([target]), false)
@@ -79,20 +76,14 @@ appData.selectionManager.setSelection(new Set([target]), false)
 ////////////////////////////////////////////////////
 // Setup the tools.
 
-renderer.getViewport().setManipulator(null)
-appData.toolManager.bind(renderer)
-
 // Connect the selection manager to the renderer
 // so it can display transform handles.
 appData.selectionManager.setRenderer(renderer)
 
 //////////////////////////////////////////////////////
 // Tools
-const viewTool = new ViewTool(appData)
-const handleTool = new HandleTool(appData)
+const cameraManipulator = renderer.getViewport().getManipulator()
 const selectionTool = new SelectionTool(appData)
-appData.toolManager.pushTool(viewTool)
-appData.toolManager.pushTool(handleTool)
 
 // // Note: the alpha value determines  the fill of the highlight.
 const selectionColor = new Color('#00436D')
@@ -141,7 +132,7 @@ window.setLocalTransformMode = () => {
 
 window.setToolModeToTransform = () => {
   if (selectItemsActivated) {
-    appData.toolManager.popTool()
+    renderer.getViewport().setManipulator(cameraManipulator)
     selectItemsActivated = false
   }
 }
@@ -150,7 +141,7 @@ window.setToolModeToSelect = () => {
   if (selectItemsActivated) {
     setToolModeToTransform()
   } else {
-    appData.toolManager.pushTool(selectionTool)
+    renderer.getViewport().setManipulator(selectionTool)
     selectItemsActivated = true
     selectItemsActivatedTime = performance.now()
   }
